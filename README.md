@@ -133,3 +133,20 @@ def generate_token(form_data: OAuth2PasswordRequestForm = Depends()):
 Run by command ```uvicorn main:app --reload```
 
 After start application go to [docs](http://localhost:8000/docs)
+
+### SQLAlchemy
+
+For setup your engine, create ```.env``` file in root directory and add ```SQLALCHEMY_DATABASE_URL```
+
+##### Example
+
+.env
+```
+SQLALCHEMY_DATABASE_URL=sqlite:///path/to/db/base.db
+```
+or 
+```
+SQLALCHEMY_DATABASE_URL=postgresql://username:password@localhost:5432/mydatabase
+```
+
+More info read [this](https://docs.sqlalchemy.org/core/engines.html)
