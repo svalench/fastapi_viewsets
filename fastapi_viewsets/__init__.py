@@ -11,6 +11,9 @@ from fastapi_viewsets.constants import ALLOWED_METHODS, MAP_METHODS
 from fastapi_viewsets.utils import get_list_queryset, get_element_by_id, create_element, update_element, delete_element
 
 
+def butle():
+    return None
+
 class BaseViewset(APIRouter):
     """Base class for Viewset endpoint"""
 
@@ -59,20 +62,20 @@ class BaseViewset(APIRouter):
     def list(self, limit: Optional[int] = 10,
              offset: Optional[int] = 0,
              search: Optional[str] = None,
-             token: str = ''
+             token: str = Depends(butle)
              ):
         return get_list_queryset(self.model, db_session=self.db_session, limit=limit, offset=offset)
 
-    def get_element(self, id: Any, token: str = ''):
+    def get_element(self, id: Any, token: str = Depends(butle)):
         return get_element_by_id(self.model, db_session=self.db_session, id=id, )
 
-    def create_element(self, item=Body(...), token: str = ''):
+    def create_element(self, item=Body(...), token: str = Depends(butle)):
         return create_element(self.model, db_session=self.db_session, data=dict(item))
 
-    def update_element(self, id: str, item=Body(...), token: str = ''):
+    def update_element(self, id: str, item=Body(...), token: str = Depends(butle)):
         return update_element(self.model, self.db_session, id, dict(item))
 
-    def delete_element(self, id: str, token: str = ''):
+    def delete_element(self, id: str, token: str = Depends(butle)):
         return {'status': True, 'text': "успешно удалено"} if delete_element(self.model, self.db_session,
                                                                              id) is True else {'status': False,
                                                                                                'text': "не удалено"}
