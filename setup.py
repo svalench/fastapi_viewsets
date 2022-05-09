@@ -7,7 +7,7 @@ long_description = (this_directory / "README.md").read_text()
 setup(
     name='fastapi_viewsets',
     author='Alexander Valenchits',
-    version='0.1.4',
+    version='0.1.5',
     description="""Package for creating endpoint
      controller classes for models in the database""",
     url='https://github.com/svalench/fastapi_viewsets',
