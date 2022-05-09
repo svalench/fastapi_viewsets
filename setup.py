@@ -7,10 +7,10 @@ long_description = (this_directory / "README.md").read_text()
 setup(
     name='fastapi_viewsets',
     author='Alexander Valenchits',
-    version='0.1.3',
+    version='0.1.4',
     description="""Package for creating endpoint
      controller classes for models in the database""",
-    url='http://example.com',
+    url='https://github.com/svalench/fastapi_viewsets',
     install_requires=['fastapi>=0.76.0', 'uvicorn>=0.17.6', 'SQLAlchemy>=1.4.36'],
     packages=['fastapi_viewsets'],
     classifiers=[
