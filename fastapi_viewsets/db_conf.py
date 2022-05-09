@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session
 
-from fastapi_viewsets import BASE_DIR
+from fastapi_viewsets.constants import BASE_DIR
 
 load_dotenv(f"{BASE_DIR}.env")
 
