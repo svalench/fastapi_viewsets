@@ -14,6 +14,66 @@ Create python environment and install this packages:
 pip install PyJWT
 pip install bcrypt
 ```
+#### Fast example 
+Create ```main.py```.
+
+import and create fastapi app.
+```
+from fastapi import FastAPI
+
+app = FastAPI()                                                     #  our FastApi app
+```
+Create schema and model for endpoint
+```
+from pydantic import BaseModel                                      #  for Schema
+from fastapi_viewsets.db_conf import Base, get_session, engine      #  for ORM model
+
+class UserSchema(BaseModel):                                        #  Schema
+    """Pydantic Schema"""
+    id: Optional[int]
+    username: str
+    password: str
+    is_admin: Optional[bool]
+
+    class Config:
+        orm_mode = True
+        
+class User(Base):                                                    #  Model
+    """SQLAlchemy model"""
+
+    __tablename__ = "user"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True)
+    password = Column(String(255))
+    is_admin = Column(Boolean, default=False)
+
+Base.metadata.create_all(engine)                                     # created table in db (by default this is sqlite3 base.db)
+```
+We have FastApi app, pydantic Schema for user, ORM model and table in DB.
+Now we are faced with the task of creating classic API points. Let's do it!
+Import ``` BaseViewset ``` from ```fastapi_viewsets``` and createing instance of this class:
+
+```
+from fastapi_viewsets import BaseViewset
+
+user_model = BaseViewset(
+    endpoint='/user',
+    model=User,
+    response_model=UserSchema,
+    tags=['Fast example endpoint']
+)
+```
+And in last step we register this endpoint's 
+```
+user_model.register()                            #  for register not all REST methods use methods, an example methods=['LIST', 'GET']
+app.include_router(user_model)
+```
+Run by command ```uvicorn main:app --reload``` and go to [docs](http://localhost:8000/docs)!
+
+
+
+#### Examle with authentificate
 Create ```main.py``` and copy this code:
 ```
 from datetime import timedelta, datetime
