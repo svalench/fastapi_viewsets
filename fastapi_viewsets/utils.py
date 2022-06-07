@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-
+from starlette import status
 
 def get_list_queryset(model, db_session, limit=None, offset=None):
     queryset = db_session().query(model)
@@ -15,12 +15,16 @@ def get_element_by_id(model, db_session, id: int or str):
 
 
 def create_element(model, db_session, data):
-    db = db_session()
-    queryset = model(**data)
-    db.add(queryset)
-    db.commit()
-    db.refresh(queryset)
-    return queryset
+    try:
+        db = db_session()
+        queryset = model(**data)
+        db.add(queryset)
+        db.commit()
+        db.refresh(queryset)
+        return queryset
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
 
 
 def update_element(model, db_session, id, data):
