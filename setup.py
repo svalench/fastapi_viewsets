@@ -11,7 +11,23 @@ setup(
     description="""Package for creating endpoint
      controller classes for models in the database""",
     url='https://github.com/svalench/fastapi_viewsets',
-    install_requires=['fastapi>=0.76.0', 'uvicorn>=0.17.6', 'SQLAlchemy>=1.4.36'],
+    install_requires=[
+        'fastapi>=0.76.0',
+        'uvicorn>=0.17.6',
+        'SQLAlchemy>=1.4.36',
+        'python-dotenv>=0.19.0',
+        'typing-extensions>=4.0.0; python_version<"3.8"'
+    ],
+    extras_require={
+        'test': [
+            'pytest>=7.0.0',
+            'pytest-asyncio>=0.21.0',
+            'pytest-cov>=4.0.0',
+            'httpx>=0.24.0',
+            'faker>=18.0.0',
+            'aiosqlite>=0.19.0',
+        ]
+    },
     packages=['fastapi_viewsets'],
     classifiers=[
         "Programming Language :: Python :: 3.9",

@@ -1,25 +1,24 @@
 from fastapi import HTTPException
 from starlette import status
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, Dict, Any, Union, Type, TypeVar, List, Callable
-from sqlalchemy.ext.declarative import DeclarativeMeta
 
 # Type variable for SQLAlchemy models
 ModelType = TypeVar('ModelType')
 
 
-def get_list_queryset(
+async def get_list_queryset(
     model: Type[ModelType],
-    db_session: Callable[[], Session],
+    db_session: Callable[[], AsyncSession],
     limit: Optional[int] = None,
     offset: Optional[int] = None
 ) -> List[ModelType]:
-    """Get list of elements from database with pagination support.
+    """Get list of elements from database with pagination support (async).
     
     Args:
         model: SQLAlchemy model class
-        db_session: Database session factory function
+        db_session: Async database session factory function
         limit: Maximum number of items to return
         offset: Number of items to skip
         
@@ -32,26 +31,28 @@ def get_list_queryset(
         if limit == 0:
             return []
         
-        queryset = db.query(model)
+        from sqlalchemy import select
+        stmt = select(model)
         if limit is not None and limit > 0:
-            queryset = queryset.limit(limit)
+            stmt = stmt.limit(limit)
         if offset:
-            queryset = queryset.offset(offset)
-        return queryset.all()
+            stmt = stmt.offset(offset)
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
     finally:
-        db.close()
+        await db.close()
 
 
-def get_element_by_id(
+async def get_element_by_id(
     model: Type[ModelType],
-    db_session: Callable[[], Session],
+    db_session: Callable[[], AsyncSession],
     id: Union[int, str]
 ) -> ModelType:
-    """Get single element by ID from database.
+    """Get single element by ID from database (async).
     
     Args:
         model: SQLAlchemy model class
-        db_session: Database session factory function
+        db_session: Async database session factory function
         id: Element ID to retrieve
         
     Returns:
@@ -62,27 +63,30 @@ def get_element_by_id(
     """
     db = db_session()
     try:
-        result = db.query(model).filter(getattr(model, 'id') == id).first()
-        if not result:
+        from sqlalchemy import select
+        stmt = select(model).where(getattr(model, 'id') == id)
+        result = await db.execute(stmt)
+        element = result.scalar_one_or_none()
+        if not element:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Element with id {id} not found"
             )
-        return result
+        return element
     finally:
-        db.close()
+        await db.close()
 
 
-def create_element(
+async def create_element(
     model: Type[ModelType],
-    db_session: Callable[[], Session],
+    db_session: Callable[[], AsyncSession],
     data: Dict[str, Any]
 ) -> ModelType:
-    """Create new element in database.
+    """Create new element in database (async).
     
     Args:
         model: SQLAlchemy model class
-        db_session: Database session factory function
+        db_session: Async database session factory function
         data: Dictionary with data for new element
         
     Returns:
@@ -107,46 +111,43 @@ def create_element(
         
         queryset = model(**data)
         db.add(queryset)
-        db.commit()
-        db.refresh(queryset)
+        await db.commit()
+        await db.refresh(queryset)
         return queryset
-    except HTTPException:
-        db.rollback()
-        raise
     except IntegrityError as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Integrity error: {str(e)}"
         )
     except SQLAlchemyError as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Database error: {str(e)}"
         )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Error creating element: {str(e)}"
         )
     finally:
-        db.close()
+        await db.close()
 
 
-def update_element(
+async def update_element(
     model: Type[ModelType],
-    db_session: Callable[[], Session],
+    db_session: Callable[[], AsyncSession],
     id: Union[int, str],
     data: Dict[str, Any],
     partial: bool = False
 ) -> ModelType:
-    """Update element in database.
+    """Update element in database (async).
     
     Args:
         model: SQLAlchemy model class
-        db_session: Database session factory function
+        db_session: Async database session factory function
         id: Element ID to update
         data: Dictionary with data to update
         partial: If True, update only provided fields (PATCH). If False, replace all fields (PUT).
@@ -159,7 +160,7 @@ def update_element(
     """
     db = db_session()
     try:
-        result = db.query(model).filter(getattr(model, 'id') == id).first()
+        result = await db.get(model, id)
         if not result:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -178,48 +179,50 @@ def update_element(
         
         # Skip update if data is empty (for PATCH with empty dict)
         if not data:
-            db.refresh(result)
+            await db.refresh(result)
             return result
         
-        db.query(model).filter(getattr(model, 'id') == id).update(data, synchronize_session=False)
-        db.commit()
-        db.refresh(result)
+        for key, value in data.items():
+            setattr(result, key, value)
+        
+        await db.commit()
+        await db.refresh(result)
         return result
     except IntegrityError as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Integrity error: {str(e)}"
         )
     except SQLAlchemyError as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Database error: {str(e)}"
         )
     except HTTPException:
-        db.rollback()
+        await db.rollback()
         raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Error updating element: {str(e)}"
         )
     finally:
-        db.close()
+        await db.close()
 
 
-def delete_element(
+async def delete_element(
     model: Type[ModelType],
-    db_session: Callable[[], Session],
+    db_session: Callable[[], AsyncSession],
     id: Union[int, str]
 ) -> bool:
-    """Delete element from database by ID.
+    """Delete element from database by ID (async).
     
     Args:
         model: SQLAlchemy model class
-        db_session: Database session factory function
+        db_session: Async database session factory function
         id: Element ID to delete
         
     Returns:
@@ -230,29 +233,30 @@ def delete_element(
     """
     db = db_session()
     try:
-        result = db.get(model, id)
+        result = await db.get(model, id)
         if not result:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Element with id {id} not found"
             )
-        db.delete(result)
-        db.commit()
+        await db.delete(result)
+        await db.commit()
         return True
     except HTTPException:
-        db.rollback()
+        await db.rollback()
         raise
     except SQLAlchemyError as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Database error: {str(e)}"
         )
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Error deleting element: {str(e)}"
         )
     finally:
-        db.close()
+        await db.close()
+

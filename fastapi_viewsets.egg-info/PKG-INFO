@@ -1,3 +1,38 @@
+Metadata-Version: 2.4
+Name: fastapi_viewsets
+Version: 0.1.5
+Summary: Package for creating endpoint
+Home-page: https://github.com/svalench/fastapi_viewsets
+Author: Alexander Valenchits
+Classifier: Programming Language :: Python :: 3.9
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: fastapi>=0.76.0
+Requires-Dist: uvicorn>=0.17.6
+Requires-Dist: SQLAlchemy>=1.4.36
+Requires-Dist: python-dotenv>=0.19.0
+Requires-Dist: typing-extensions>=4.0.0; python_version < "3.8"
+Provides-Extra: test
+Requires-Dist: pytest>=7.0.0; extra == "test"
+Requires-Dist: pytest-asyncio>=0.21.0; extra == "test"
+Requires-Dist: pytest-cov>=4.0.0; extra == "test"
+Requires-Dist: httpx>=0.24.0; extra == "test"
+Requires-Dist: faker>=18.0.0; extra == "test"
+Requires-Dist: aiosqlite>=0.19.0; extra == "test"
+Dynamic: author
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
 # FastAPI ViewSets
 
 [![Python Version](https://img.shields.io/badge/python-3.6%2B-blue.svg)](https://www.python.org/downloads/)

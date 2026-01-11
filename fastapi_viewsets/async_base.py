@@ -1,15 +1,20 @@
 import functools
-import os
 from collections.abc import Iterable
 from typing import List, Optional, Any, Callable, Type, TypeVar, Union, Dict
 
 from fastapi import APIRouter, Body, Depends
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi_viewsets.constants import ALLOWED_METHODS, MAP_METHODS
-from fastapi_viewsets.utils import get_list_queryset, get_element_by_id, create_element, update_element, delete_element
+from fastapi_viewsets.async_utils import (
+    get_list_queryset,
+    get_element_by_id,
+    create_element,
+    update_element,
+    delete_element
+)
 
 # Type variables for generic types
 ModelType = TypeVar('ModelType')
@@ -20,10 +25,11 @@ def butle() -> None:
     """Dummy dependency function for optional authentication."""
     return None
 
-class BaseViewset(APIRouter):
-    """Base class for Viewset endpoint.
+
+class AsyncBaseViewset(APIRouter):
+    """Async base class for Viewset endpoint.
     
-    This class provides CRUD operations for SQLAlchemy models with FastAPI.
+    This class provides async CRUD operations for SQLAlchemy models with FastAPI.
     It automatically generates REST endpoints for list, get, create, update, and delete operations.
     """
 
@@ -35,17 +41,17 @@ class BaseViewset(APIRouter):
         allowed_methods: Optional[List[str]] = None,
         endpoint: Optional[str] = None,
         model: Optional[Type[ModelType]] = None,
-        db_session: Optional[Callable[[], Session]] = None,
+        db_session: Optional[Callable[[], AsyncSession]] = None,
         response_model: Optional[Type[ResponseModelType]] = None,
         **kwargs
     ):
-        """Initialize BaseViewset.
+        """Initialize AsyncBaseViewset.
         
         Args:
             allowed_methods: List of allowed HTTP methods (optional)
             endpoint: Base endpoint path (e.g., '/user')
             model: SQLAlchemy model class
-            db_session: Database session factory function
+            db_session: Async database session factory function
             response_model: Pydantic model for response serialization
             **kwargs: Additional arguments passed to APIRouter
         """
@@ -54,7 +60,7 @@ class BaseViewset(APIRouter):
         self.endpoint: Optional[str] = endpoint
         self.response_model: Optional[Type[ResponseModelType]] = response_model
         self.model: Optional[Type[ModelType]] = model
-        self.db_session: Optional[Callable[[], Session]] = db_session
+        self.db_session: Optional[Callable[[], AsyncSession]] = db_session
 
     def register(
         self,
@@ -148,14 +154,14 @@ class BaseViewset(APIRouter):
                 name=route_name,
             )
 
-    def list(
+    async def list(
         self,
         limit: Optional[int] = 10,
         offset: Optional[int] = 0,
         search: Optional[str] = None,
         token: str = Depends(butle)
     ) -> List[ResponseModelType]:
-        """List all elements with pagination support.
+        """List all elements with pagination support (async).
         
         Args:
             limit: Maximum number of items to return
@@ -166,14 +172,14 @@ class BaseViewset(APIRouter):
         Returns:
             List of model instances
         """
-        return get_list_queryset(self.model, db_session=self.db_session, limit=limit, offset=offset)
+        return await get_list_queryset(self.model, db_session=self.db_session, limit=limit, offset=offset)
 
-    def get_element(
+    async def get_element(
         self,
         id: Union[int, str],
         token: str = Depends(butle)
     ) -> ResponseModelType:
-        """Get single element by ID.
+        """Get single element by ID (async).
         
         Args:
             id: Element ID
@@ -193,14 +199,14 @@ class BaseViewset(APIRouter):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Element id cannot be empty"
             )
-        return get_element_by_id(self.model, db_session=self.db_session, id=id)
+        return await get_element_by_id(self.model, db_session=self.db_session, id=id)
 
-    def create_element(
+    async def create_element(
         self,
         item: ResponseModelType = Body(...),
         token: str = Depends(butle)
     ) -> ResponseModelType:
-        """Create new element.
+        """Create new element (async).
         
         Args:
             item: Pydantic model instance with data for new element
@@ -212,16 +218,16 @@ class BaseViewset(APIRouter):
         Raises:
             HTTPException: If creation fails
         """
-        return create_element(self.model, db_session=self.db_session, data=dict(item))
+        return await create_element(self.model, db_session=self.db_session, data=dict(item))
 
-    def update_element(
+    async def update_element(
         self,
         id: Union[int, str],
         item: ResponseModelType = Body(...),
         token: str = Depends(butle),
         partial: bool = False
     ) -> ResponseModelType:
-        """Update element.
+        """Update element (async).
         
         Args:
             id: Element ID to update
@@ -235,14 +241,14 @@ class BaseViewset(APIRouter):
         Raises:
             HTTPException: If update fails or element not found
         """
-        return update_element(self.model, self.db_session, id, dict(item), partial=partial)
+        return await update_element(self.model, self.db_session, id, dict(item), partial=partial)
 
-    def delete_element(
+    async def delete_element(
         self,
         id: Union[int, str],
         token: str = Depends(butle)
     ) -> Dict[str, Union[bool, str]]:
-        """Delete element by ID.
+        """Delete element by ID (async).
         
         Args:
             id: Element ID to delete
@@ -254,7 +260,7 @@ class BaseViewset(APIRouter):
         Raises:
             HTTPException: If deletion fails or element not found
         """
-        result = delete_element(self.model, self.db_session, id)
+        result = await delete_element(self.model, self.db_session, id)
         return {
             'status': True,
             'text': "successfully deleted"
@@ -263,8 +269,3 @@ class BaseViewset(APIRouter):
             'text': "deletion failed"
         }
 
-
-# Export async viewset
-from fastapi_viewsets.async_base import AsyncBaseViewset
-
-__all__ = ['BaseViewset', 'AsyncBaseViewset']

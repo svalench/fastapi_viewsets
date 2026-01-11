@@ -1,0 +1,15 @@
+fastapi>=0.76.0
+uvicorn>=0.17.6
+SQLAlchemy>=1.4.36
+python-dotenv>=0.19.0
+
+[:python_version < "3.8"]
+typing-extensions>=4.0.0
+
+[test]
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.0.0
+httpx>=0.24.0
+faker>=18.0.0
+aiosqlite>=0.19.0
