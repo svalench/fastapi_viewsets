@@ -1,4 +1,4 @@
-# Release v0.1.5
+# Release v1.0.1
 
 ## 🎉 What's New
 
