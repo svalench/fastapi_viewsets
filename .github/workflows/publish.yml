@@ -15,7 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write  # для Trusted Publishing (рекомендуется)
 
     steps:
     - name: Checkout code
@@ -45,21 +44,16 @@ jobs:
         twine check dist/*
 
     - name: Publish to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
-      continue-on-error: true
-      id: trusted-publish
-      with:
-        print-hash: true
-
-    - name: Publish to PyPI (Fallback with API Token)
-      if: steps.trusted-publish.outcome == 'failure'
       env:
         TWINE_USERNAME: __token__
         TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
       run: |
         if [ -z "$TWINE_PASSWORD" ]; then
-          echo "Error: PYPI_API_TOKEN secret is not set. Please configure Trusted Publishing or add API token."
+          echo "::error::PYPI_API_TOKEN secret is not set. Please add it in repository settings."
+          echo "::error::Go to: Settings → Secrets and variables → Actions → New repository secret"
+          echo "::error::Name: PYPI_API_TOKEN, Value: your PyPI API token"
           exit 1
         fi
+        echo "Uploading package to PyPI..."
         twine upload dist/*
 
