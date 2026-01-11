@@ -46,11 +46,20 @@ jobs:
 
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
+      continue-on-error: true
+      id: trusted-publish
       with:
         print-hash: true
-      # Альтернативный вариант с API токеном (если Trusted Publishing не настроен):
-      # env:
-      #   TWINE_USERNAME: __token__
-      #   TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-      # run: twine upload dist/*
+
+    - name: Publish to PyPI (Fallback with API Token)
+      if: steps.trusted-publish.outcome == 'failure'
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+      run: |
+        if [ -z "$TWINE_PASSWORD" ]; then
+          echo "Error: PYPI_API_TOKEN secret is not set. Please configure Trusted Publishing or add API token."
+          exit 1
+        fi
+        twine upload dist/*
 
