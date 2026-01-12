@@ -108,7 +108,7 @@ For async support, use `AsyncBaseViewset`:
 ```python
 from typing import Optional
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Column, Integer, String, Boolean
 from fastapi_viewsets import AsyncBaseViewset
 from fastapi_viewsets.db_conf import Base, get_async_session, engine
@@ -119,13 +119,12 @@ app = FastAPI()
 # Define Pydantic schema
 class UserSchema(BaseModel):
     """Pydantic Schema"""
+    model_config = ConfigDict(from_attributes=True)
     id: Optional[int] = None
     username: str
     password: str
     is_admin: Optional[bool] = False
 
-    class Config:
-        orm_mode = True
 
 # Define SQLAlchemy model
 class User(Base):
