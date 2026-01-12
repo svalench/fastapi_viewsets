@@ -1,10 +1,13 @@
 """Peewee ORM adapter implementation."""
 
-from typing import Optional, Dict, Any, Union, Type, TypeVar, List, Callable
+from typing import Optional, Dict, Any, Union, Type, TypeVar, List, Callable, TYPE_CHECKING
 from fastapi import HTTPException
 from starlette import status
 
 from fastapi_viewsets.orm.base import BaseORMAdapter, ModelType
+
+if TYPE_CHECKING:
+    from peewee import Database
 
 try:
     from peewee import Model, Database, DoesNotExist, IntegrityError as PeeweeIntegrityError
@@ -12,6 +15,7 @@ try:
 except ImportError:
     PEEWEE_AVAILABLE = False
     Model = None
+    Database = None  # type: ignore
 
 
 class PeeweeAdapter(BaseORMAdapter):
@@ -20,7 +24,7 @@ class PeeweeAdapter(BaseORMAdapter):
     def __init__(
         self,
         database_url: str,
-        database: Optional[Database] = None
+        database: Optional[Any] = None
     ):
         """Initialize Peewee adapter.
         
