@@ -1,12 +1,10 @@
-# Release Notes
+# Release v1.1.0
 
-## Version 1.1.0
-
-### 🎉 What's New
+## 🎉 What's New
 
 This major release introduces **multi-ORM support**, allowing you to choose between SQLAlchemy, Tortoise ORM, and Peewee. The library now uses an adapter pattern to provide a unified interface for different ORM implementations, making it more flexible and extensible.
 
-### ✨ New Features
+## ✨ New Features
 
 - **Multi-ORM Support**: Choose your preferred ORM - SQLAlchemy (default), Tortoise ORM, or Peewee
 - **ORM Adapter Pattern**: Unified interface for all ORM operations through `BaseORMAdapter`
@@ -15,7 +13,7 @@ This major release introduces **multi-ORM support**, allowing you to choose betw
 - **Flexible Database Configuration**: Support for different database URLs per ORM type
 - **Backward Compatibility**: Existing SQLAlchemy code continues to work without changes
 
-### 🔧 Improvements
+## 🔧 Improvements
 
 - **Modular Architecture**: Clean separation of ORM-specific logic into adapters
 - **Better Code Organization**: ORM adapters are now in a dedicated `orm` package
@@ -23,7 +21,7 @@ This major release introduces **multi-ORM support**, allowing you to choose betw
 - **Improved Error Handling**: Better error messages for missing ORM dependencies
 - **Code Quality**: Improved code structure and maintainability
 
-### 📦 Dependencies
+## 📦 Dependencies
 
 - FastAPI >= 0.76.0
 - SQLAlchemy >= 1.4.36 (default, core dependency)
@@ -33,7 +31,7 @@ This major release introduces **multi-ORM support**, allowing you to choose betw
 - `tortoise-orm>=0.20.0` and `asyncpg>=0.28.0` for Tortoise ORM support
 - `peewee>=3.17.0` for Peewee ORM support
 
-### 🧪 Testing
+## 🧪 Testing
 
 - Comprehensive test suite with 200+ tests
 - 70%+ code coverage
@@ -42,14 +40,14 @@ This major release introduces **multi-ORM support**, allowing you to choose betw
 - Edge case and error handling tests
 - Both sync and async test coverage
 
-### 📚 Documentation
+## 📚 Documentation
 
 - Updated README with multi-ORM configuration examples
 - Added ORM adapter documentation
 - Configuration examples for each supported ORM
 - Migration guide for existing users
 
-### 🚀 Migration Guide
+## 🚀 Migration Guide
 
 If you're upgrading from version 1.0.1:
 
@@ -82,7 +80,7 @@ If you're upgrading from version 1.0.1:
    )
    ```
 
-### 🔌 ORM Adapters
+## 🔌 ORM Adapters
 
 The library now supports three ORM adapters:
 
@@ -100,7 +98,7 @@ The library now supports three ORM adapters:
    - Lightweight and simple
    - Requires `peewee`
 
-### 📝 Configuration
+## 📝 Configuration
 
 Configure your ORM through environment variables in `.env`:
 
@@ -124,127 +122,29 @@ TORTOISE_APP_LABEL=models
 PEEWEE_DATABASE_URL=sqlite:///database.db
 ```
 
-### 🙏 Acknowledgments
-
-Thank you to all contributors and users who provided feedback and reported issues!
-
----
-
-## Version 1.0.1
-
-### 🎉 What's New
-
-This release brings significant improvements to the FastAPI ViewSets library, making it more robust, feature-rich, and production-ready.
-
-### ✨ New Features
-
-- **Full Async Support**: Complete async/await support with `AsyncBaseViewset` for high-performance applications
-- **Comprehensive Type Hints**: Full type annotation support throughout the codebase for better IDE experience and code maintainability
-- **Improved Error Handling**: Enhanced error handling with specific exceptions for integrity errors and database errors
-- **PUT vs PATCH Support**: Proper distinction between PUT (full replacement) and PATCH (partial update) operations
-- **Route Registration Improvements**: Fixed route registration order to properly handle LIST and GET endpoints
-
-### 🐛 Bug Fixes
-
-- Fixed 405 Method Not Allowed error for LIST endpoints
-- Fixed database session leaks by ensuring proper session cleanup
-- Fixed PUT/PATCH update logic to correctly handle partial updates
-- Fixed limit=0 handling to return empty list instead of all items
-- Fixed primary key exclusion in PUT updates
-- Improved validation for required fields during creation
-
-### 🔧 Improvements
-
-- **Better Database Session Management**: Proper try/finally blocks to ensure sessions are always closed
-- **Enhanced Route Registration**: Improved order of route registration to prevent conflicts between LIST and GET endpoints
-- **Code Quality**: Removed unused code, improved code structure and organization
-- **Documentation**: Updated README with comprehensive examples and API descriptions
-
-### 📦 Dependencies
-
-- FastAPI >= 0.76.0
-- SQLAlchemy >= 1.4.36
-- Python >= 3.6
-
-### 🧪 Testing
-
-- Comprehensive test suite with 108+ tests
-- 86% code coverage
-- Unit tests for all core components
-- Integration tests for full CRUD workflows
-- Edge case testing
-- Both sync and async test coverage
-
-### 📚 Documentation
-
-- Updated README with async examples
-- Improved code examples
-- Better API documentation
-- Clear distinction between sync and async usage
-
-### 🚀 Migration Guide
-
-If you're upgrading from a previous version:
-
-1. **Async Support**: If you want to use async features, install an async database driver:
-   ```bash
-   pip install aiosqlite  # for SQLite
-   # or
-   pip install asyncpg   # for PostgreSQL
-   ```
-
-2. **PUT/PATCH**: PUT now performs full replacement (sets missing fields to None), while PATCH only updates provided fields. Make sure your Pydantic schemas support optional fields for PATCH operations.
-
-3. **Route Registration**: The library now automatically handles route registration order. No changes needed in your code.
-
-### 🙏 Acknowledgments
-
-Thank you to all contributors and users who provided feedback and reported issues!
-
----
-
-## Installation
+## 📦 Installation
 
 ```bash
 pip install fastapi-viewsets
 ```
 
-For async support:
+For specific ORM support:
+
 ```bash
-pip install fastapi-viewsets aiosqlite
+# For Tortoise ORM
+pip install fastapi-viewsets[tortoise]
+
+# For Peewee ORM
+pip install fastapi-viewsets[peewee]
 ```
 
-## Quick Start
-
-```python
-from fastapi import FastAPI
-from fastapi_viewsets import BaseViewset
-from fastapi_viewsets.db_conf import Base, get_session, engine
-
-app = FastAPI()
-
-# Define your model and schema
-# ... (see README for full example)
-
-# Create viewset
-user_viewset = BaseViewset(
-    endpoint='/users',
-    model=User,
-    response_model=UserSchema,
-    db_session=get_session,
-    tags=['Users']
-)
-
-# Register endpoints
-user_viewset.register()
-
-# Include in app
-app.include_router(user_viewset)
-```
-
-## Links
+## 🔗 Links
 
 - [GitHub Repository](https://github.com/svalench/fastapi_viewsets)
 - [PyPI Package](https://pypi.org/project/fastapi-viewsets/)
-- [Documentation](https://github.com/svalench/fastapi_viewsets#readme)
+- [Full Documentation](https://github.com/svalench/fastapi_viewsets#readme)
+
+---
+
+**Full Changelog**: https://github.com/svalench/fastapi_viewsets/compare/v1.0.1...v1.1.0
 
