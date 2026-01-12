@@ -3,7 +3,11 @@ import os
 import tempfile
 from pathlib import Path
 
-from fastapi_viewsets.db_conf import get_session, get_async_session, engine, async_engine, Base
+from fastapi_viewsets.db_conf import (
+    get_session, get_async_session, engine, async_engine, Base,
+    get_orm_adapter, ORM_TYPE
+)
+from fastapi_viewsets.orm.sqlalchemy_adapter import SQLAlchemyAdapter
 
 
 @pytest.mark.unit
@@ -113,4 +117,54 @@ class TestDbConfEnv:
         assert Base is not None
         from sqlalchemy.ext.declarative import DeclarativeMeta
         assert isinstance(Base, DeclarativeMeta)
+
+
+@pytest.mark.unit
+class TestORMAdapterIntegration:
+    """Tests for ORM adapter integration in db_conf."""
+    
+    def test_get_orm_adapter_returns_adapter(self, monkeypatch):
+        """Test that get_orm_adapter returns an adapter."""
+        monkeypatch.setenv('ORM_TYPE', 'sqlalchemy')
+        monkeypatch.setenv('DATABASE_URL', 'sqlite:///test.db')
+        
+        # Reload module to pick up env vars
+        import importlib
+        import fastapi_viewsets.db_conf
+        importlib.reload(fastapi_viewsets.db_conf)
+        
+        from fastapi_viewsets.db_conf import get_orm_adapter
+        adapter = get_orm_adapter()
+        
+        assert adapter is not None
+        assert isinstance(adapter, SQLAlchemyAdapter)
+    
+    def test_get_orm_adapter_singleton(self, monkeypatch):
+        """Test that get_orm_adapter returns singleton."""
+        monkeypatch.setenv('ORM_TYPE', 'sqlalchemy')
+        monkeypatch.setenv('DATABASE_URL', 'sqlite:///test.db')
+        
+        # Reload module
+        import importlib
+        import fastapi_viewsets.db_conf
+        importlib.reload(fastapi_viewsets.db_conf)
+        
+        from fastapi_viewsets.db_conf import get_orm_adapter
+        adapter1 = get_orm_adapter()
+        adapter2 = get_orm_adapter()
+        
+        # Should be the same instance
+        assert adapter1 is adapter2
+    
+    def test_orm_type_env_var(self, monkeypatch):
+        """Test that ORM_TYPE is read from environment."""
+        monkeypatch.setenv('ORM_TYPE', 'sqlalchemy')
+        
+        # Reload module
+        import importlib
+        import fastapi_viewsets.db_conf
+        importlib.reload(fastapi_viewsets.db_conf)
+        
+        from fastapi_viewsets.db_conf import ORM_TYPE
+        assert ORM_TYPE == 'sqlalchemy'
 

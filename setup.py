@@ -19,6 +19,16 @@ setup(
         'typing-extensions>=4.0.0; python_version<"3.8"'
     ],
     extras_require={
+        'sqlalchemy': [
+            'SQLAlchemy>=1.4.36',
+        ],
+        'tortoise': [
+            'tortoise-orm>=0.20.0',
+            'asyncpg>=0.28.0',
+        ],
+        'peewee': [
+            'peewee>=3.17.0',
+        ],
         'test': [
             'pytest>=7.0.0',
             'pytest-asyncio>=0.21.0',

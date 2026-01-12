@@ -1,58 +1,52 @@
 from fastapi import HTTPException
 from starlette import status
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError
-from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any, Union, Type, TypeVar, List, Callable
-from sqlalchemy.ext.declarative import DeclarativeMeta
 
-# Type variable for SQLAlchemy models
+from fastapi_viewsets.orm.base import BaseORMAdapter
+from fastapi_viewsets.db_conf import get_orm_adapter
+
+# Type variable for ORM models
 ModelType = TypeVar('ModelType')
 
 
 def get_list_queryset(
     model: Type[ModelType],
-    db_session: Callable[[], Session],
+    db_session: Callable[[], Any],
     limit: Optional[int] = None,
-    offset: Optional[int] = None
+    offset: Optional[int] = None,
+    orm_adapter: Optional[BaseORMAdapter] = None
 ) -> List[ModelType]:
     """Get list of elements from database with pagination support.
     
     Args:
-        model: SQLAlchemy model class
+        model: ORM model class
         db_session: Database session factory function
         limit: Maximum number of items to return
         offset: Number of items to skip
+        orm_adapter: ORM adapter instance (optional, uses default if not provided)
         
     Returns:
         List of model instances
     """
-    db = db_session()
-    try:
-        # If limit is 0, return empty list immediately
-        if limit == 0:
-            return []
-        
-        queryset = db.query(model)
-        if limit is not None and limit > 0:
-            queryset = queryset.limit(limit)
-        if offset:
-            queryset = queryset.offset(offset)
-        return queryset.all()
-    finally:
-        db.close()
+    if orm_adapter is None:
+        orm_adapter = get_orm_adapter()
+    
+    return orm_adapter.get_list_queryset(model, db_session, limit, offset)
 
 
 def get_element_by_id(
     model: Type[ModelType],
-    db_session: Callable[[], Session],
-    id: Union[int, str]
+    db_session: Callable[[], Any],
+    id: Union[int, str],
+    orm_adapter: Optional[BaseORMAdapter] = None
 ) -> ModelType:
     """Get single element by ID from database.
     
     Args:
-        model: SQLAlchemy model class
+        model: ORM model class
         db_session: Database session factory function
         id: Element ID to retrieve
+        orm_adapter: ORM adapter instance (optional, uses default if not provided)
         
     Returns:
         Model instance
@@ -60,30 +54,25 @@ def get_element_by_id(
     Raises:
         HTTPException: If element not found
     """
-    db = db_session()
-    try:
-        result = db.query(model).filter(getattr(model, 'id') == id).first()
-        if not result:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Element with id {id} not found"
-            )
-        return result
-    finally:
-        db.close()
+    if orm_adapter is None:
+        orm_adapter = get_orm_adapter()
+    
+    return orm_adapter.get_element_by_id(model, db_session, id)
 
 
 def create_element(
     model: Type[ModelType],
-    db_session: Callable[[], Session],
-    data: Dict[str, Any]
+    db_session: Callable[[], Any],
+    data: Dict[str, Any],
+    orm_adapter: Optional[BaseORMAdapter] = None
 ) -> ModelType:
     """Create new element in database.
     
     Args:
-        model: SQLAlchemy model class
+        model: ORM model class
         db_session: Database session factory function
         data: Dictionary with data for new element
+        orm_adapter: ORM adapter instance (optional, uses default if not provided)
         
     Returns:
         Created model instance
@@ -91,65 +80,29 @@ def create_element(
     Raises:
         HTTPException: If creation fails
     """
-    db = db_session()
-    try:
-        # Validate required fields for creation
-        # Check model columns for non-nullable fields (excluding id and auto-generated fields)
-        required_fields = {col.name for col in model.__table__.columns 
-                          if not col.nullable and col.name != 'id' and not col.primary_key}
-        provided_fields = {k for k, v in data.items() if v is not None}
-        missing_fields = required_fields - provided_fields
-        if missing_fields:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Missing required fields: {', '.join(missing_fields)}"
-            )
-        
-        queryset = model(**data)
-        db.add(queryset)
-        db.commit()
-        db.refresh(queryset)
-        return queryset
-    except HTTPException:
-        db.rollback()
-        raise
-    except IntegrityError as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Integrity error: {str(e)}"
-        )
-    except SQLAlchemyError as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Database error: {str(e)}"
-        )
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error creating element: {str(e)}"
-        )
-    finally:
-        db.close()
+    if orm_adapter is None:
+        orm_adapter = get_orm_adapter()
+    
+    return orm_adapter.create_element(model, db_session, data)
 
 
 def update_element(
     model: Type[ModelType],
-    db_session: Callable[[], Session],
+    db_session: Callable[[], Any],
     id: Union[int, str],
     data: Dict[str, Any],
-    partial: bool = False
+    partial: bool = False,
+    orm_adapter: Optional[BaseORMAdapter] = None
 ) -> ModelType:
     """Update element in database.
     
     Args:
-        model: SQLAlchemy model class
+        model: ORM model class
         db_session: Database session factory function
         id: Element ID to update
         data: Dictionary with data to update
         partial: If True, update only provided fields (PATCH). If False, replace all fields (PUT).
+        orm_adapter: ORM adapter instance (optional, uses default if not provided)
         
     Returns:
         Updated model instance
@@ -157,70 +110,25 @@ def update_element(
     Raises:
         HTTPException: If update fails or element not found
     """
-    db = db_session()
-    try:
-        result = db.query(model).filter(getattr(model, 'id') == id).first()
-        if not result:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Element with id {id} not found"
-            )
-        
-        if partial:
-            # PATCH: update only provided fields, skip None values
-            data = {key: value for key, value in dict(data).items() if value is not None}
-        else:
-            # PUT: replace all fields with provided values, use None for missing fields
-            # Get all column names from the model, excluding primary keys
-            all_columns = {col.name for col in model.__table__.columns if not col.primary_key}
-            # For PUT, we need all fields - use provided values or None
-            data = {col: data.get(col, None) for col in all_columns}
-        
-        # Skip update if data is empty (for PATCH with empty dict)
-        if not data:
-            db.refresh(result)
-            return result
-        
-        db.query(model).filter(getattr(model, 'id') == id).update(data, synchronize_session=False)
-        db.commit()
-        db.refresh(result)
-        return result
-    except IntegrityError as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Integrity error: {str(e)}"
-        )
-    except SQLAlchemyError as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Database error: {str(e)}"
-        )
-    except HTTPException:
-        db.rollback()
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error updating element: {str(e)}"
-        )
-    finally:
-        db.close()
+    if orm_adapter is None:
+        orm_adapter = get_orm_adapter()
+    
+    return orm_adapter.update_element(model, db_session, id, data, partial)
 
 
 def delete_element(
     model: Type[ModelType],
-    db_session: Callable[[], Session],
-    id: Union[int, str]
+    db_session: Callable[[], Any],
+    id: Union[int, str],
+    orm_adapter: Optional[BaseORMAdapter] = None
 ) -> bool:
     """Delete element from database by ID.
     
     Args:
-        model: SQLAlchemy model class
+        model: ORM model class
         db_session: Database session factory function
         id: Element ID to delete
+        orm_adapter: ORM adapter instance (optional, uses default if not provided)
         
     Returns:
         True if deletion was successful
@@ -228,31 +136,7 @@ def delete_element(
     Raises:
         HTTPException: If deletion fails or element not found
     """
-    db = db_session()
-    try:
-        result = db.get(model, id)
-        if not result:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Element with id {id} not found"
-            )
-        db.delete(result)
-        db.commit()
-        return True
-    except HTTPException:
-        db.rollback()
-        raise
-    except SQLAlchemyError as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Database error: {str(e)}"
-        )
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error deleting element: {str(e)}"
-        )
-    finally:
-        db.close()
+    if orm_adapter is None:
+        orm_adapter = get_orm_adapter()
+    
+    return orm_adapter.delete_element(model, db_session, id)

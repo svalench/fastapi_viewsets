@@ -15,6 +15,8 @@ from fastapi_viewsets.async_utils import (
     update_element,
     delete_element
 )
+from fastapi_viewsets.orm.base import BaseORMAdapter
+from fastapi_viewsets.db_conf import get_orm_adapter
 
 # Type variables for generic types
 ModelType = TypeVar('ModelType')
@@ -43,6 +45,7 @@ class AsyncBaseViewset(APIRouter):
         model: Optional[Type[ModelType]] = None,
         db_session: Optional[Callable[[], AsyncSession]] = None,
         response_model: Optional[Type[ResponseModelType]] = None,
+        orm_adapter: Optional[BaseORMAdapter] = None,
         **kwargs
     ):
         """Initialize AsyncBaseViewset.
@@ -50,9 +53,10 @@ class AsyncBaseViewset(APIRouter):
         Args:
             allowed_methods: List of allowed HTTP methods (optional)
             endpoint: Base endpoint path (e.g., '/user')
-            model: SQLAlchemy model class
+            model: ORM model class
             db_session: Async database session factory function
             response_model: Pydantic model for response serialization
+            orm_adapter: ORM adapter instance (optional, uses default if not provided)
             **kwargs: Additional arguments passed to APIRouter
         """
         super().__init__(*args, **kwargs)
@@ -61,6 +65,7 @@ class AsyncBaseViewset(APIRouter):
         self.response_model: Optional[Type[ResponseModelType]] = response_model
         self.model: Optional[Type[ModelType]] = model
         self.db_session: Optional[Callable[[], AsyncSession]] = db_session
+        self.orm_adapter: Optional[BaseORMAdapter] = orm_adapter or get_orm_adapter()
 
     def register(
         self,
@@ -172,7 +177,7 @@ class AsyncBaseViewset(APIRouter):
         Returns:
             List of model instances
         """
-        return await get_list_queryset(self.model, db_session=self.db_session, limit=limit, offset=offset)
+        return await get_list_queryset(self.model, db_session=self.db_session, limit=limit, offset=offset, orm_adapter=self.orm_adapter)
 
     async def get_element(
         self,
@@ -199,7 +204,7 @@ class AsyncBaseViewset(APIRouter):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Element id cannot be empty"
             )
-        return await get_element_by_id(self.model, db_session=self.db_session, id=id)
+        return await get_element_by_id(self.model, db_session=self.db_session, id=id, orm_adapter=self.orm_adapter)
 
     async def create_element(
         self,
@@ -218,7 +223,7 @@ class AsyncBaseViewset(APIRouter):
         Raises:
             HTTPException: If creation fails
         """
-        return await create_element(self.model, db_session=self.db_session, data=dict(item))
+        return await create_element(self.model, db_session=self.db_session, data=dict(item), orm_adapter=self.orm_adapter)
 
     async def update_element(
         self,
@@ -241,7 +246,7 @@ class AsyncBaseViewset(APIRouter):
         Raises:
             HTTPException: If update fails or element not found
         """
-        return await update_element(self.model, self.db_session, id, dict(item), partial=partial)
+        return await update_element(self.model, self.db_session, id, dict(item), partial=partial, orm_adapter=self.orm_adapter)
 
     async def delete_element(
         self,
@@ -260,7 +265,7 @@ class AsyncBaseViewset(APIRouter):
         Raises:
             HTTPException: If deletion fails or element not found
         """
-        result = await delete_element(self.model, self.db_session, id)
+        result = await delete_element(self.model, self.db_session, id, orm_adapter=self.orm_adapter)
         return {
             'status': True,
             'text': "successfully deleted"

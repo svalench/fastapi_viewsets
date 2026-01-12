@@ -7,9 +7,12 @@ from fastapi import APIRouter, Body, Depends
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from typing import Any
 
 from fastapi_viewsets.constants import ALLOWED_METHODS, MAP_METHODS
 from fastapi_viewsets.utils import get_list_queryset, get_element_by_id, create_element, update_element, delete_element
+from fastapi_viewsets.orm.base import BaseORMAdapter
+from fastapi_viewsets.db_conf import get_orm_adapter
 
 # Type variables for generic types
 ModelType = TypeVar('ModelType')
@@ -35,8 +38,9 @@ class BaseViewset(APIRouter):
         allowed_methods: Optional[List[str]] = None,
         endpoint: Optional[str] = None,
         model: Optional[Type[ModelType]] = None,
-        db_session: Optional[Callable[[], Session]] = None,
+        db_session: Optional[Callable[[], Any]] = None,
         response_model: Optional[Type[ResponseModelType]] = None,
+        orm_adapter: Optional[BaseORMAdapter] = None,
         **kwargs
     ):
         """Initialize BaseViewset.
@@ -44,9 +48,10 @@ class BaseViewset(APIRouter):
         Args:
             allowed_methods: List of allowed HTTP methods (optional)
             endpoint: Base endpoint path (e.g., '/user')
-            model: SQLAlchemy model class
+            model: ORM model class
             db_session: Database session factory function
             response_model: Pydantic model for response serialization
+            orm_adapter: ORM adapter instance (optional, uses default if not provided)
             **kwargs: Additional arguments passed to APIRouter
         """
         super().__init__(*args, **kwargs)
@@ -55,6 +60,7 @@ class BaseViewset(APIRouter):
         self.response_model: Optional[Type[ResponseModelType]] = response_model
         self.model: Optional[Type[ModelType]] = model
         self.db_session: Optional[Callable[[], Session]] = db_session
+        self.orm_adapter: Optional[BaseORMAdapter] = orm_adapter or get_orm_adapter()
 
     def register(
         self,
@@ -166,7 +172,7 @@ class BaseViewset(APIRouter):
         Returns:
             List of model instances
         """
-        return get_list_queryset(self.model, db_session=self.db_session, limit=limit, offset=offset)
+        return get_list_queryset(self.model, db_session=self.db_session, limit=limit, offset=offset, orm_adapter=self.orm_adapter)
 
     def get_element(
         self,
@@ -193,7 +199,7 @@ class BaseViewset(APIRouter):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Element id cannot be empty"
             )
-        return get_element_by_id(self.model, db_session=self.db_session, id=id)
+        return get_element_by_id(self.model, db_session=self.db_session, id=id, orm_adapter=self.orm_adapter)
 
     def create_element(
         self,
@@ -212,7 +218,7 @@ class BaseViewset(APIRouter):
         Raises:
             HTTPException: If creation fails
         """
-        return create_element(self.model, db_session=self.db_session, data=dict(item))
+        return create_element(self.model, db_session=self.db_session, data=dict(item), orm_adapter=self.orm_adapter)
 
     def update_element(
         self,
@@ -235,7 +241,7 @@ class BaseViewset(APIRouter):
         Raises:
             HTTPException: If update fails or element not found
         """
-        return update_element(self.model, self.db_session, id, dict(item), partial=partial)
+        return update_element(self.model, self.db_session, id, dict(item), partial=partial, orm_adapter=self.orm_adapter)
 
     def delete_element(
         self,
@@ -254,7 +260,7 @@ class BaseViewset(APIRouter):
         Raises:
             HTTPException: If deletion fails or element not found
         """
-        result = delete_element(self.model, self.db_session, id)
+        result = delete_element(self.model, self.db_session, id, orm_adapter=self.orm_adapter)
         return {
             'status': True,
             'text': "successfully deleted"
