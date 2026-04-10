@@ -1,412 +1,212 @@
 # FastAPI ViewSets
 
-[![Python Version](https://img.shields.io/badge/python-3.6%2B-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![PyPI version](https://badge.fury.io/py/fastapi-viewsets.svg)](https://badge.fury.io/py/fastapi-viewsets)
+[![Python Version](https://img.shields.io/pypi/pyversions/fastapi-viewsets.svg)](https://pypi.org/project/fastapi-viewsets/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Downloads](https://img.shields.io/pypi/dm/fastapi-viewsets.svg)](https://pypi.org/project/fastapi-viewsets/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688?logo=fastapi)](https://fastapi.tiangolo.com)
+[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0%2B-red)](https://sqlalchemy.org)
+[![Pydantic](https://img.shields.io/badge/Pydantic-v2-blueviolet)](https://docs.pydantic.dev)
 
-A powerful package for creating REST API endpoints with FastAPI and SQLAlchemy. Automatically generates CRUD operations (Create, Read, Update, Delete) for your database models, similar to Django REST Framework's ViewSets.
-
-## Features
-
-- 🚀 **Automatic CRUD endpoints** - Generate REST API endpoints automatically
-- 🔒 **OAuth2 support** - Built-in authentication protection for endpoints
-- ⚡ **Async support** - Full async/await support for high-performance applications
-- 📝 **Type hints** - Full type annotation support for better IDE experience
-- 🎯 **Flexible** - Choose which HTTP methods to enable
-- 🔧 **Easy to use** - Simple API, minimal boilerplate code
-
-## Installation
-
-Install the package using pip:
+> **Django REST Framework-style ViewSets for FastAPI** — auto-generate CRUD endpoints from SQLAlchemy, Tortoise ORM, or Peewee models in minutes.
 
 ```bash
 pip install fastapi-viewsets
 ```
 
-For async support, you'll also need an async database driver:
+## Why fastapi-viewsets?
+
+FastAPI is powerful but writing CRUD routers is repetitive. This library brings the DRF ViewSet pattern to FastAPI:
+
+- **One class → six endpoints** (LIST, GET, POST, PUT, PATCH, DELETE) — no boilerplate
+- **Multi-ORM** — SQLAlchemy (sync + async), Tortoise ORM, Peewee
+- **OAuth2 per-method protection** — protect only the methods you want
+- **Async-first** — full `async/await` support via `AsyncBaseViewset`
+- **Auto-pagination** on LIST endpoints
+- **OpenAPI docs** generated automatically with proper tags
+
+## Installation
 
 ```bash
-# For SQLite
-pip install aiosqlite
+# Base install
+pip install fastapi-viewsets
 
-# For PostgreSQL
-pip install asyncpg
+# With async DB drivers
+pip install fastapi-viewsets aiosqlite          # SQLite async
+pip install fastapi-viewsets asyncpg            # PostgreSQL async
+pip install fastapi-viewsets aiomysql           # MySQL async
 
-# For MySQL
-pip install aiomysql
+# Alternative ORMs
+pip install fastapi-viewsets tortoise-orm       # Tortoise ORM
+pip install fastapi-viewsets peewee             # Peewee ORM
 ```
 
 ## Quick Start
 
-### Synchronous Example
-
-Create a `main.py` file:
+### Synchronous (SQLAlchemy)
 
 ```python
-from typing import Optional
 from fastapi import FastAPI
 from pydantic import BaseModel
-from sqlalchemy import Column, Integer, String, Boolean
+from sqlalchemy import Column, Integer, String
 from fastapi_viewsets import BaseViewset
 from fastapi_viewsets.db_conf import Base, get_session, engine
 
-# Create FastAPI app
 app = FastAPI()
 
-# Define Pydantic schema
 class UserSchema(BaseModel):
-    """Pydantic Schema"""
-    id: Optional[int] = None
+    id: int | None = None
     username: str
-    password: str
-    is_admin: Optional[bool] = False
-
     class Config:
         orm_mode = True
 
-# Define SQLAlchemy model
 class User(Base):
-    """SQLAlchemy model"""
     __tablename__ = "user"
-
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     username = Column(String, unique=True)
-    password = Column(String(255))
-    is_admin = Column(Boolean, default=False)
 
-# Create database tables
 Base.metadata.create_all(engine)
 
-# Create viewset
 user_viewset = BaseViewset(
-    endpoint='/user',
+    endpoint='/users',
     model=User,
     response_model=UserSchema,
     db_session=get_session,
     tags=['Users']
 )
-
-# Register all CRUD methods
-user_viewset.register()
-
-# Include router in FastAPI app
+user_viewset.register()   # registers LIST, GET, POST, PUT, PATCH, DELETE
 app.include_router(user_viewset)
 ```
 
-Run the application:
+Run: `uvicorn main:app --reload` → visit `http://localhost:8000/docs` ✅
 
-```bash
-uvicorn main:app --reload
-```
-
-Visit the interactive API documentation at [http://localhost:8000/docs](http://localhost:8000/docs)
-
-### Async Example
-
-For async support, use `AsyncBaseViewset`:
+### Async (SQLAlchemy async)
 
 ```python
-from typing import Optional
-from fastapi import FastAPI
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import Column, Integer, String, Boolean
 from fastapi_viewsets import AsyncBaseViewset
-from fastapi_viewsets.db_conf import Base, get_async_session, engine
+from fastapi_viewsets.db_conf import get_async_session
 
-# Create FastAPI app
-app = FastAPI()
-
-# Define Pydantic schema
-class UserSchema(BaseModel):
-    """Pydantic Schema"""
-    model_config = ConfigDict(from_attributes=True)
-    id: Optional[int] = None
-    username: str
-    password: str
-    is_admin: Optional[bool] = False
-
-
-# Define SQLAlchemy model
-class User(Base):
-    """SQLAlchemy model"""
-    __tablename__ = "user"
-
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True)
-    password = Column(String(255))
-    is_admin = Column(Boolean, default=False)
-
-# Create database tables
-Base.metadata.create_all(engine)
-
-# Create async viewset
 user_viewset = AsyncBaseViewset(
-    endpoint='/user',
+    endpoint='/users',
     model=User,
     response_model=UserSchema,
     db_session=get_async_session,
     tags=['Users']
 )
-
-# Register all CRUD methods
 user_viewset.register()
-
-# Include router in FastAPI app
 app.include_router(user_viewset)
 ```
 
-## Authentication Example
-
-You can protect endpoints with OAuth2:
+### Select specific methods
 
 ```python
-from fastapi import FastAPI, Depends, HTTPException
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi_viewsets import BaseViewset
-from fastapi_viewsets.db_conf import Base, get_session, engine
-from starlette import status
+# Read-only public, write operations protected by OAuth2
+from fastapi.security import OAuth2PasswordBearer
 
-app = FastAPI()
+oauth2 = OAuth2PasswordBearer(tokenUrl="/token")
 
-# ... define User model and schema ...
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-# Create protected viewset
-protected_viewset = BaseViewset(
-    endpoint='/user',
-    model=User,
-    response_model=UserSchema,
-    db_session=get_session,
-    tags=['Protected Users']
+user_viewset.register(
+    methods=['LIST', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    protected_methods=['POST', 'PUT', 'PATCH', 'DELETE'],
+    oauth_protect=oauth2
 )
-
-# Register methods with authentication
-protected_viewset.register(
-    methods=['LIST', 'POST', 'GET', 'PUT'],
-    protected_methods=['LIST', 'POST', 'GET', 'PUT'],
-    oauth_protect=oauth2_scheme
-)
-
-app.include_router(protected_viewset)
-
-# Token endpoint
-@app.post('/token')
-def generate_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    # Your token generation logic here
-    pass
 ```
 
-## Available HTTP Methods
+## Generated Endpoints
 
-The following HTTP methods are supported:
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/users` | List all (paginated) |
+| `GET` | `/users/{id}` | Get by ID |
+| `POST` | `/users` | Create |
+| `PUT` | `/users/{id}` | Replace |
+| `PATCH` | `/users/{id}` | Partial update |
+| `DELETE` | `/users/{id}` | Delete |
 
-- `LIST` - GET request to list all items (with pagination)
-- `GET` - GET request to retrieve a single item by ID
-- `POST` - POST request to create a new item
-- `PUT` - PUT request to replace an entire item
-- `PATCH` - PATCH request to partially update an item
-- `DELETE` - DELETE request to delete an item
+## Supported ORMs & Databases
 
-### Selecting Specific Methods
+| ORM | Sync | Async | SQLite | PostgreSQL | MySQL |
+|---|---|---|---|---|---|
+| SQLAlchemy (default) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Tortoise ORM | — | ✅ | ✅ | ✅ | ✅ |
+| Peewee | ✅ | — | ✅ | ✅ | ✅ |
 
-You can register only specific methods:
-
-```python
-user_viewset.register(methods=['LIST', 'GET', 'POST'])
-```
-
-## Database Configuration
-
-### ORM Selection
-
-`fastapi_viewsets` supports multiple ORM libraries. You can choose which ORM to use by setting the `ORM_TYPE` environment variable.
-
-### Environment Variables
-
-Create a `.env` file in your project root:
-
-#### SQLAlchemy (Default)
+## Configuration (.env)
 
 ```env
+# SQLAlchemy (default)
 ORM_TYPE=sqlalchemy
-SQLALCHEMY_DATABASE_URL=sqlite:///path/to/db/base.db
-```
+SQLALCHEMY_DATABASE_URL=sqlite:///./app.db
+SQLALCHEMY_ASYNC_DATABASE_URL=sqlite+aiosqlite:///./app.db
 
-Or for PostgreSQL:
-
-```env
-ORM_TYPE=sqlalchemy
-SQLALCHEMY_DATABASE_URL=postgresql://username:password@localhost:5432/mydatabase
-```
-
-For async databases, you can also specify:
-
-```env
-ORM_TYPE=sqlalchemy
-SQLALCHEMY_DATABASE_URL=postgresql://username:password@localhost:5432/mydatabase
-SQLALCHEMY_ASYNC_DATABASE_URL=postgresql+asyncpg://username:password@localhost:5432/mydatabase
-```
-
-#### Tortoise ORM
-
-```env
+# Tortoise ORM
 ORM_TYPE=tortoise
-TORTOISE_DATABASE_URL=postgresql://username:password@localhost:5432/mydatabase
+TORTOISE_DATABASE_URL=postgresql://user:pass@localhost/db
 TORTOISE_MODELS=["app.models"]
-TORTOISE_APP_LABEL=models
-```
 
-Or use JSON format for models:
-
-```env
-ORM_TYPE=tortoise
-TORTOISE_DATABASE_URL=postgresql://username:password@localhost:5432/mydatabase
-TORTOISE_MODELS=["app.models", "app.other_models"]
-```
-
-#### Peewee
-
-```env
+# Peewee
 ORM_TYPE=peewee
-PEEWEE_DATABASE_URL=postgresql://username:password@localhost:5432/mydatabase
-```
-
-Or for SQLite:
-
-```env
-ORM_TYPE=peewee
-PEEWEE_DATABASE_URL=sqlite:///path/to/db/base.db
-```
-
-### Supported ORMs and Databases
-
-- **SQLAlchemy** (default)
-  - SQLite (synchronous and async with `aiosqlite`)
-  - PostgreSQL (synchronous and async with `asyncpg`)
-  - MySQL (synchronous and async with `aiomysql`)
-  
-- **Tortoise ORM** (async-only)
-  - PostgreSQL (with `asyncpg`)
-  - MySQL (with `aiomysql`)
-  - SQLite (with `aiosqlite`)
-  
-- **Peewee** (sync-only)
-  - SQLite
-  - PostgreSQL
-  - MySQL
-
-### Installation of ORM-specific Dependencies
-
-Install the ORM you want to use:
-
-```bash
-# For SQLAlchemy (default, already included)
-pip install SQLAlchemy
-
-# For Tortoise ORM
-pip install tortoise-orm asyncpg  # or aiomysql for MySQL
-
-# For Peewee
-pip install peewee
-```
-
-For async support with SQLAlchemy, install the appropriate driver:
-
-```bash
-# For SQLite
-pip install aiosqlite
-
-# For PostgreSQL
-pip install asyncpg
-
-# For MySQL
-pip install aiomysql
+PEEWEE_DATABASE_URL=sqlite:///./app.db
 ```
 
 ## API Reference
 
-### BaseViewset
+### `BaseViewset(endpoint, model, response_model, db_session, tags, allowed_methods?)`
 
-Synchronous viewset class for CRUD operations.
+| Parameter | Type | Description |
+|---|---|---|
+| `endpoint` | `str` | Base URL path, e.g. `/users` |
+| `model` | ORM model | SQLAlchemy / Tortoise / Peewee model |
+| `response_model` | Pydantic model | Response schema |
+| `db_session` | `Callable` | Session factory |
+| `tags` | `List[str]` | OpenAPI tags |
+| `allowed_methods` | `List[str]` | Whitelist of HTTP methods |
 
-**Parameters:**
-- `endpoint` (str): Base endpoint path (e.g., '/user')
-- `model`: ORM model class (SQLAlchemy, Tortoise, Peewee, etc.)
-- `response_model`: Pydantic model for response serialization
-- `db_session` (Callable): Database session factory function
-- `orm_adapter` (BaseORMAdapter, optional): ORM adapter instance. If not provided, uses default from configuration.
-- `tags` (List[str]): Tags for OpenAPI documentation
-- `allowed_methods` (List[str], optional): List of allowed methods
+### `register(methods?, oauth_protect?, protected_methods?)`
 
-**Methods:**
-- `register(methods=None, oauth_protect=None, protected_methods=None)`: Register CRUD endpoints
+| Parameter | Description |
+|---|---|
+| `methods` | Which methods to register (default: all 6) |
+| `protected_methods` | Which methods require auth |
+| `oauth_protect` | OAuth2 scheme instance |
 
-### AsyncBaseViewset
+`AsyncBaseViewset` — same API, all operations are `async`.
 
-Asynchronous viewset class for CRUD operations.
+## Comparison with Alternatives
 
-Same parameters and methods as `BaseViewset`, but all operations are async.
-
-### ORM Adapters
-
-The library supports multiple ORM adapters through the `BaseORMAdapter` interface:
-
-- **SQLAlchemyAdapter**: For SQLAlchemy ORM (default)
-- **TortoiseAdapter**: For Tortoise ORM (async-only)
-- **PeeweeAdapter**: For Peewee ORM (sync-only)
-
-You can get the default adapter from configuration:
-
-```python
-from fastapi_viewsets.db_conf import get_orm_adapter
-
-adapter = get_orm_adapter()  # Reads ORM_TYPE from environment
-```
-
-Or create a specific adapter:
-
-```python
-from fastapi_viewsets.orm.factory import ORMFactory
-
-# Create SQLAlchemy adapter
-adapter = ORMFactory.create_adapter('sqlalchemy', {
-    'database_url': 'postgresql://user:pass@localhost/db'
-})
-
-# Create Tortoise adapter
-adapter = ORMFactory.create_adapter('tortoise', {
-    'database_url': 'postgresql://user:pass@localhost/db',
-    'models': ['app.models']
-})
-```
-
-## Differences Between PUT and PATCH
-
-- **PUT**: Replaces the entire object. All fields must be provided (missing fields will be set to None).
-- **PATCH**: Partially updates the object. Only provided fields will be updated.
+| Feature | fastapi-viewsets | fastapi-crudrouter | fastapi-utils |
+|---|---|---|---|
+| Multi-ORM | ✅ (3 ORMs) | Partial | SQLAlchemy only |
+| Async support | ✅ | ✅ | Partial |
+| OAuth2 per-method | ✅ | — | — |
+| Method selection | ✅ | ✅ | — |
+| Pagination | ✅ | ✅ | — |
 
 ## Error Handling
 
-The library provides comprehensive error handling:
-
-- `404 Not Found`: When an element is not found
-- `400 Bad Request`: For validation errors and database integrity errors
-- Detailed error messages for debugging
+- `404 Not Found` — item does not exist
+- `400 Bad Request` — validation or database integrity error
+- All errors include descriptive messages for easy debugging
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please open an issue first to discuss what you'd like to change, then submit a PR.
+
+1. Fork the repo
+2. Create a feature branch: `git checkout -b feature/my-feature`
+3. Commit your changes
+4. Open a Pull Request
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT — see [LICENSE](LICENSE)
 
 ## Author
 
-Alexander Valenchits
+**Alexander Valenchits** — [GitHub](https://github.com/svalench)
 
 ## Links
 
-- [GitHub Repository](https://github.com/svalench/fastapi_viewsets)
-- [PyPI Package](https://pypi.org/project/fastapi-viewsets/)
+- 📦 [PyPI Package](https://pypi.org/project/fastapi-viewsets/)
+- 🐛 [Issues](https://github.com/svalench/fastapi_viewsets/issues)
+- 📖 [FastAPI docs](https://fastapi.tiangolo.com)
