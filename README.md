@@ -1,212 +1,238 @@
-# FastAPI ViewSets
+# fastapi-viewsets
 
-[![PyPI version](https://badge.fury.io/py/fastapi-viewsets.svg)](https://badge.fury.io/py/fastapi-viewsets)
-[![Python Version](https://img.shields.io/pypi/pyversions/fastapi-viewsets.svg)](https://pypi.org/project/fastapi-viewsets/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Downloads](https://img.shields.io/pypi/dm/fastapi-viewsets.svg)](https://pypi.org/project/fastapi-viewsets/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688?logo=fastapi)](https://fastapi.tiangolo.com)
-[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0%2B-red)](https://sqlalchemy.org)
-[![Pydantic](https://img.shields.io/badge/Pydantic-v2-blueviolet)](https://docs.pydantic.dev)
+Django REST Framework-style ViewSets for FastAPI — auto-generate CRUD endpoints from SQLAlchemy, Tortoise ORM, or Peewee models in minutes.
 
-> **Django REST Framework-style ViewSets for FastAPI** — auto-generate CRUD endpoints from SQLAlchemy, Tortoise ORM, or Peewee models in minutes.
+[![PyPI version](https://badge.fury.io/py/fastapi-viewsets.svg)](https://pypi.org/project/fastapi-viewsets/)
+[![Python versions](https://img.shields.io/pypi/pyversions/fastapi-viewsets.svg)](https://pypi.org/project/fastapi-viewsets/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/svalench/fastapi_viewsets/blob/main/LICENSE)
+[![CI](https://github.com/svalench/fastapi_viewsets/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/svalench/fastapi_viewsets/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/svalench/fastapi_viewsets/graph/badge.svg)](https://codecov.io/gh/svalench/fastapi_viewsets)
+[![Downloads/month](https://static.pepy.tech/badge/fastapi-viewsets/month)](https://pepy.tech/project/fastapi-viewsets)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/svalench/fastapi_viewsets/pulls)
 
-```bash
-pip install fastapi-viewsets
-```
+## Why fastapi-viewsets
 
-## Why fastapi-viewsets?
+- **DRF-style ergonomics** on top of FastAPI routers and dependency injection.
+- **Less boilerplate** — register LIST, GET, POST, PUT, PATCH, and DELETE from one class.
+- **ORM-agnostic core** — pluggable adapters for SQLAlchemy (sync/async), Tortoise ORM, and Peewee (`ORM_TYPE` / optional extras).
+- **Typed, Pydantic-first responses** with OpenAPI tags and schemas generated from your `response_model`.
+- **Built-in list pagination** (`limit` / `offset`), optional OAuth2 on selected operations, and room to grow for search and richer filters (see Roadmap).
 
-FastAPI is powerful but writing CRUD routers is repetitive. This library brings the DRF ViewSet pattern to FastAPI:
+## Feature matrix
 
-- **One class → six endpoints** (LIST, GET, POST, PUT, PATCH, DELETE) — no boilerplate
-- **Multi-ORM** — SQLAlchemy (sync + async), Tortoise ORM, Peewee
-- **OAuth2 per-method protection** — protect only the methods you want
-- **Async-first** — full `async/await` support via `AsyncBaseViewset`
-- **Auto-pagination** on LIST endpoints
-- **OpenAPI docs** generated automatically with proper tags
+| Feature | SQLAlchemy (sync) | SQLAlchemy (async) | Tortoise ORM | Peewee |
+| --- | --- | --- | --- | --- |
+| `BaseViewset` / `AsyncBaseViewset` CRUD | Supported | Supported (`AsyncBaseViewset`) | Supported via adapter + async session | Supported via adapter |
+| `limit` / `offset` on LIST | Supported | Supported | Supported | Supported |
+| OAuth2 on selected methods (`register`) | Supported | Supported | Supported | Supported |
+| `search` query on LIST (server-side) | **Roadmap** | **Roadmap** | **Roadmap** | **Roadmap** |
+| Declarative ordering / advanced filters | **Roadmap** | **Roadmap** | **Roadmap** | **Roadmap** |
 
 ## Installation
 
 ```bash
-# Base install
 pip install fastapi-viewsets
-
-# With async DB drivers
-pip install fastapi-viewsets aiosqlite          # SQLite async
-pip install fastapi-viewsets asyncpg            # PostgreSQL async
-pip install fastapi-viewsets aiomysql           # MySQL async
-
-# Alternative ORMs
-pip install fastapi-viewsets tortoise-orm       # Tortoise ORM
-pip install fastapi-viewsets peewee             # Peewee ORM
 ```
 
-## Quick Start
+Optional extras (see `setup.py`):
 
-### Synchronous (SQLAlchemy)
+```bash
+pip install "fastapi-viewsets[sqlalchemy]"
+pip install "fastapi-viewsets[tortoise]"
+pip install "fastapi-viewsets[peewee]"
+pip install "fastapi-viewsets[test]"   # pytest, httpx, coverage, etc.
+```
+
+For async SQLAlchemy you still need a driver such as `aiosqlite`, `asyncpg`, or `aiomysql` alongside your database URL.
+
+## Quickstart (SQLAlchemy, sync)
+
+Save as `main.py` in an empty folder and run `python main.py` or `uvicorn main:app --reload`.
 
 ```python
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Column, Integer, String
+
 from fastapi_viewsets import BaseViewset
-from fastapi_viewsets.db_conf import Base, get_session, engine
+from fastapi_viewsets.db_conf import Base, engine, get_session
 
 app = FastAPI()
 
-class UserSchema(BaseModel):
-    id: int | None = None
-    username: str
-    class Config:
-        orm_mode = True
 
-class User(Base):
-    __tablename__ = "user"
+class Item(Base):
+    """Example SQLAlchemy model."""
+
+    __tablename__ = "items"
     id = Column(Integer, primary_key=True)
-    username = Column(String, unique=True)
+    name = Column(String(255), nullable=False)
 
-Base.metadata.create_all(engine)
 
-user_viewset = BaseViewset(
-    endpoint='/users',
-    model=User,
-    response_model=UserSchema,
-    db_session=get_session,
-    tags=['Users']
-)
-user_viewset.register()   # registers LIST, GET, POST, PUT, PATCH, DELETE
-app.include_router(user_viewset)
+class ItemSchema(BaseModel):
+    """Pydantic model for request and response bodies."""
+
+    model_config = ConfigDict(from_attributes=True)
+    id: int | None = None
+    name: str
+
+
+Base.metadata.create_all(bind=engine)
+items = BaseViewset(endpoint="/items", model=Item, response_model=ItemSchema, db_session=get_session, tags=["items"])
+items.register(methods=["LIST", "GET", "POST", "PATCH", "DELETE"])
+app.include_router(items)
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="127.0.0.1", port=8000)
 ```
 
-Run: `uvicorn main:app --reload` → visit `http://localhost:8000/docs` ✅
+`GET /items` returns `200` with a JSON list (possibly empty). Use `POST /items` with `{"name": "apple"}` to create rows.
 
-### Async (SQLAlchemy async)
+## Authentication example
 
-```python
-from fastapi_viewsets import AsyncBaseViewset
-from fastapi_viewsets.db_conf import get_async_session
-
-user_viewset = AsyncBaseViewset(
-    endpoint='/users',
-    model=User,
-    response_model=UserSchema,
-    db_session=get_async_session,
-    tags=['Users']
-)
-user_viewset.register()
-app.include_router(user_viewset)
-```
-
-### Select specific methods
+`register()` accepts `OAuth2PasswordBearer` plus a list of logical operations (`POST`, `PUT`, …) that require a bearer token.
 
 ```python
-# Read-only public, write operations protected by OAuth2
+from fastapi import FastAPI
 from fastapi.security import OAuth2PasswordBearer
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import Column, Integer, String
+from fastapi_viewsets import BaseViewset
+from fastapi_viewsets.db_conf import Base, engine, get_session
 
+app = FastAPI()
 oauth2 = OAuth2PasswordBearer(tokenUrl="/token")
 
-user_viewset.register(
-    methods=['LIST', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-    protected_methods=['POST', 'PUT', 'PATCH', 'DELETE'],
-    oauth_protect=oauth2
-)
+class Item(Base):
+    """SQLAlchemy model for OAuth2-protected writes."""
+
+    __tablename__ = "items_oauth"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False)
+
+
+class ItemSchema(BaseModel):
+    """Pydantic schema for Item payloads and responses."""
+
+    model_config = ConfigDict(from_attributes=True)
+    id: int | None = None
+    name: str
+
+
+Base.metadata.create_all(bind=engine)
+router = BaseViewset(endpoint="/items", model=Item, response_model=ItemSchema, db_session=get_session, tags=["items"])
+router.register(methods=["LIST", "GET", "POST", "PATCH", "DELETE"], oauth_protect=oauth2, protected_methods=["POST", "PATCH", "DELETE"])
+app.include_router(router)
 ```
 
-## Generated Endpoints
+## Pagination, filtering, ordering
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/users` | List all (paginated) |
-| `GET` | `/users/{id}` | Get by ID |
-| `POST` | `/users` | Create |
-| `PUT` | `/users/{id}` | Replace |
-| `PATCH` | `/users/{id}` | Partial update |
-| `DELETE` | `/users/{id}` | Delete |
+**Pagination** — `BaseViewset.list` maps `limit` and `offset` to query parameters on the LIST route.
 
-## Supported ORMs & Databases
+```python
+from fastapi_viewsets import BaseViewset
 
-| ORM | Sync | Async | SQLite | PostgreSQL | MySQL |
-|---|---|---|---|---|---|
-| SQLAlchemy (default) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Tortoise ORM | — | ✅ | ✅ | ✅ | ✅ |
-| Peewee | ✅ | — | ✅ | ✅ | ✅ |
-
-## Configuration (.env)
-
-```env
-# SQLAlchemy (default)
-ORM_TYPE=sqlalchemy
-SQLALCHEMY_DATABASE_URL=sqlite:///./app.db
-SQLALCHEMY_ASYNC_DATABASE_URL=sqlite+aiosqlite:///./app.db
-
-# Tortoise ORM
-ORM_TYPE=tortoise
-TORTOISE_DATABASE_URL=postgresql://user:pass@localhost/db
-TORTOISE_MODELS=["app.models"]
-
-# Peewee
-ORM_TYPE=peewee
-PEEWEE_DATABASE_URL=sqlite:///./app.db
+def pagination_hint() -> str:
+    """Document LIST pagination after `register()` (e.g. GET /items?limit=10&offset=20)."""
+    return "limit and offset are parsed by `BaseViewset.list`"
 ```
 
-## API Reference
+**Filtering** — `list` accepts `search`, but ORM adapters ignore it today; server-side search is on the Roadmap. Subclass `BaseViewset` and override `list()` with your own query until then.
 
-### `BaseViewset(endpoint, model, response_model, db_session, tags, allowed_methods?)`
+```python
+from fastapi_viewsets import BaseViewset
 
-| Parameter | Type | Description |
-|---|---|---|
-| `endpoint` | `str` | Base URL path, e.g. `/users` |
-| `model` | ORM model | SQLAlchemy / Tortoise / Peewee model |
-| `response_model` | Pydantic model | Response schema |
-| `db_session` | `Callable` | Session factory |
-| `tags` | `List[str]` | OpenAPI tags |
-| `allowed_methods` | `List[str]` | Whitelist of HTTP methods |
+def filtering_hint() -> str:
+    """Explain that `search` is reserved; override `list` for real filters today."""
+    return "search parameter is not yet applied in adapters"
+```
 
-### `register(methods?, oauth_protect?, protected_methods?)`
+**Ordering** — there is no shared `order_by` helper yet; override `list()` with an ordered query or wait for the Roadmap.
 
-| Parameter | Description |
-|---|---|
-| `methods` | Which methods to register (default: all 6) |
-| `protected_methods` | Which methods require auth |
-| `oauth_protect` | OAuth2 scheme instance |
+```python
+from fastapi_viewsets import BaseViewset
 
-`AsyncBaseViewset` — same API, all operations are `async`.
+def ordering_hint() -> str:
+    """Note the absence of a built-in ordering helper on LIST endpoints."""
+    return "override list or wait for roadmap ordering helpers"
+```
 
-## Comparison with Alternatives
+## Permissions and custom routes
 
-| Feature | fastapi-viewsets | fastapi-crudrouter | fastapi-utils |
-|---|---|---|---|
-| Multi-ORM | ✅ (3 ORMs) | Partial | SQLAlchemy only |
-| Async support | ✅ | ✅ | Partial |
-| OAuth2 per-method | ✅ | — | — |
-| Method selection | ✅ | ✅ | — |
-| Pagination | ✅ | ✅ | — |
+There is no `get_queryset` hook; scope queries by subclassing `BaseViewset` and overriding `list()`, `get_element()`, or related handlers. The class subclasses `APIRouter`, so attach extra endpoints with `add_api_route` **before** `register()` if paths must win over `/{id}`:
 
-## Error Handling
+```python
+from fastapi_viewsets import BaseViewset
 
-- `404 Not Found` — item does not exist
-- `400 Bad Request` — validation or database integrity error
-- All errors include descriptive messages for easy debugging
+
+class ItemsWithStats(BaseViewset):
+    """Adds a custom read-only route alongside generated CRUD."""
+
+    def __init__(self, *args, **kwargs):
+        """Register static paths before CRUD routes."""
+        super().__init__(*args, **kwargs)
+        self.add_api_route(
+            f"{self.endpoint}/stats",
+            self.collection_stats,
+            methods=["GET"],
+            tags=self.tags or [],
+            name="items_stats",
+        )
+
+    def collection_stats(self) -> dict[str, str]:
+        """Return a minimal summary for monitoring or health checks."""
+        return {"resource": self.endpoint.strip("/")}
+
+
+# Instantiate with model, response_model, and db_session (see quickstart), then call register().
+```
+
+## What is new (v1.1.0)
+
+- Multi-ORM support via adapters (SQLAlchemy default, optional Tortoise and Peewee).
+- `ORMFactory` and environment-driven `ORM_TYPE` configuration.
+- Continued compatibility with existing SQLAlchemy-based apps.
+
+Details: [RELEASE_NOTES.md](RELEASE_NOTES.md), [RELEASE_1.1.0.md](RELEASE_1.1.0.md).
+
+## Roadmap (planned)
+
+| Item | Target | Status |
+| --- | --- | --- |
+| Dedicated `AsyncModelViewSet` ergonomics on top of SQLAlchemy 2.x async sessions | v1.2 | Planned |
+| First-class Tortoise ORM viewset examples and docs (`TortoiseModelViewSet` naming TBD) | v1.2 | Planned |
+| Async pagination helpers and transaction boundaries across adapters | v1.3 | Planned |
+| Richer OpenAPI for nested Pydantic models | v1.3 | Planned |
+| Wire `search` on LIST to real database queries | v1.2 | Planned |
+
+## Comparison with alternatives
+
+| Approach | Developer experience | ORM support | Permissions | Filtering |
+| --- | --- | --- | --- | --- |
+| fastapi-viewsets | One `BaseViewset` registers CRUD routes | SQLAlchemy sync/async, Tortoise, Peewee via adapters | OAuth2 per logical method via `register` | `limit`/`offset` today; `search` and advanced filters on Roadmap |
+| fastapi-crudrouter | CRUD-focused generators, less ViewSet-shaped | Primarily SQLAlchemy | Custom middleware/deps | Often extended manually |
+| Hand-rolled FastAPI | Full control, most boilerplate | Any ORM you integrate | Fully custom | Fully custom |
+
+## Testing
+
+From the repository root (see `pytest.ini`):
+
+```bash
+pytest
+```
+
+Coverage is enforced with `--cov-fail-under=70` (HTML and XML reports are emitted for local inspection).
 
 ## Contributing
 
-Contributions are welcome! Please open an issue first to discuss what you'd like to change, then submit a PR.
-
-1. Fork the repo
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Commit your changes
-4. Open a Pull Request
+See [open issues](https://github.com/svalench/fastapi_viewsets/issues) to propose changes; pull requests are welcome.
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+Distributed under the MIT License. See [LICENSE](LICENSE).
 
 ## Author
 
-**Alexander Valenchits** — [GitHub](https://github.com/svalench)
-
-## Links
-
-- 📦 [PyPI Package](https://pypi.org/project/fastapi-viewsets/)
-- 🐛 [Issues](https://github.com/svalench/fastapi_viewsets/issues)
-- 📖 [FastAPI docs](https://fastapi.tiangolo.com)
+Built by [Alexander Valenchits](https://github.com/svalench) — Tech Lead @ AluSoft, Minsk.
