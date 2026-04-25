@@ -90,6 +90,214 @@ if __name__ == "__main__":
 
 `GET /items` returns `200` with a JSON list (possibly empty). Use `POST /items` with `{"name": "apple"}` to create rows.
 
+## Async quickstart (SQLAlchemy 2.x + Pydantic v2)
+
+`AsyncBaseViewset` mirrors `BaseViewset` but every CRUD handler is
+`async`, backed by an async SQLAlchemy `AsyncSession`. Install an async
+driver alongside the package:
+
+```bash
+pip install "fastapi-viewsets[sqlalchemy]" aiosqlite
+```
+
+Point `SQLALCHEMY_DATABASE_URL` (or `SQLALCHEMY_ASYNC_DATABASE_URL`) at
+an async-capable URL and use the lazy helpers from `db_conf`. The
+package auto-converts `sqlite://` to `sqlite+aiosqlite://`,
+`postgresql://` to `postgresql+asyncpg://`, etc.
+
+```python
+from fastapi import FastAPI
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import Column, Integer, String
+
+from fastapi_viewsets import AsyncBaseViewset
+from fastapi_viewsets.db_conf import (
+    Base,
+    async_engine,
+    get_async_session,
+)
+
+app = FastAPI()
+
+
+class Item(Base):
+    """Async-friendly SQLAlchemy model."""
+
+    __tablename__ = "items_async"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False)
+
+
+class ItemSchema(BaseModel):
+    """Pydantic v2 schema reused as request and response model."""
+
+    model_config = ConfigDict(from_attributes=True)
+    id: int | None = None
+    name: str
+
+
+@app.on_event("startup")
+async def _create_tables() -> None:
+    """Create tables once on startup using the async engine."""
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
+items = AsyncBaseViewset(
+    endpoint="/items",
+    model=Item,
+    response_model=ItemSchema,
+    db_session=get_async_session,
+    tags=["items"],
+)
+items.register(methods=["LIST", "GET", "POST", "PATCH", "DELETE"])
+app.include_router(items)
+```
+
+Notes:
+
+- Pydantic v2 is required (`pydantic>=2.5`). Use
+  `model_config = ConfigDict(from_attributes=True)` instead of the v1
+  `class Config: orm_mode = True`.
+- `PATCH` uses `model_dump(exclude_unset=True)` internally, so unset
+  fields are no longer overwritten with defaults.
+- If the async driver (`aiosqlite` / `asyncpg` / `aiomysql`) is not
+  installed, sync usage still works — only `get_async_session()` raises
+  a helpful `RuntimeError`.
+
+## Overriding `list` and `create_element` (custom LIST and POST)
+
+Every CRUD handler is a regular method, so subclassing the viewset is
+the canonical way to add filtering, ordering, validation, conflict
+handling, and so on. The example below subclasses `AsyncBaseViewset`
+and overrides both `list` (case-insensitive search + simple ordering)
+and `create_element` (input normalization + map `IntegrityError` to
+409).
+
+```python
+from typing import List, Optional
+
+from fastapi import Body, HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import Column, DateTime, Integer, String, func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from fastapi_viewsets import AsyncBaseViewset
+from fastapi_viewsets.db_conf import Base, get_async_session
+
+
+class Item(Base):
+    """Item model with timestamps and a unique name."""
+
+    __tablename__ = "items_custom"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False, unique=True, index=True)
+    description = Column(String(1024), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class ItemSchema(BaseModel):
+    """Single Pydantic v2 schema reused as request and response model.
+
+    Server-controlled fields (``id``, ``created_at``) are optional so
+    the same schema can be used for POST/PATCH bodies and responses
+    — ``register()`` patches the body annotation to ``response_model``.
+    """
+
+    model_config = ConfigDict(from_attributes=True, str_strip_whitespace=True)
+    id: Optional[int] = None
+    name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = Field(default=None, max_length=1024)
+    created_at: Optional[object] = None  # datetime in real code
+
+
+class ItemsViewSet(AsyncBaseViewset):
+    """Custom async viewset that overrides LIST and POST."""
+
+    async def list(  # type: ignore[override]
+        self,
+        limit: int = 20,
+        offset: int = 0,
+        search: Optional[str] = None,
+        order_by: str = "-created_at",
+        token: Optional[str] = None,
+    ) -> List[ItemSchema]:
+        """Custom LIST: case-insensitive search + whitelist ordering.
+
+        Query: ``GET /items?search=foo&order_by=-name&limit=10``.
+        """
+        session: AsyncSession = self.db_session()
+        try:
+            stmt = select(self.model)
+            if search:
+                stmt = stmt.where(self.model.name.ilike(f"%{search}%"))
+
+            # "-name" → desc, "name" → asc; whitelist allowed columns.
+            field, desc = (order_by[1:], True) if order_by.startswith("-") else (order_by, False)
+            column = {"name": self.model.name, "created_at": self.model.created_at}.get(field)
+            if column is None:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unsupported order_by")
+            stmt = stmt.order_by(column.desc() if desc else column.asc())
+            stmt = stmt.offset(offset).limit(limit)
+
+            rows = (await session.execute(stmt)).scalars().all()
+            return [ItemSchema.model_validate(row) for row in rows]
+        finally:
+            await session.close()
+
+    async def create_element(  # type: ignore[override]
+        self,
+        item: ItemSchema = Body(...),
+        token: Optional[str] = None,
+    ) -> ItemSchema:
+        """Custom POST: normalize, persist, map IntegrityError to 409."""
+        # Pydantic v2 dump; ``str_strip_whitespace`` already trimmed strings.
+        payload = item.model_dump(exclude_unset=True, exclude={"id", "created_at"})
+
+        session: AsyncSession = self.db_session()
+        try:
+            obj = self.model(**payload)
+            session.add(obj)
+            try:
+                await session.commit()
+            except IntegrityError as exc:
+                await session.rollback()
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    f"Item '{payload.get('name')}' already exists",
+                ) from exc
+            await session.refresh(obj)
+            return ItemSchema.model_validate(obj)
+        finally:
+            await session.close()
+
+
+items = ItemsViewSet(
+    endpoint="/items",
+    model=Item,
+    response_model=ItemSchema,
+    db_session=get_async_session,
+    tags=["items"],
+)
+items.register(methods=["LIST", "GET", "POST", "PATCH", "DELETE"])
+```
+
+Key points when overriding:
+
+- **Keep the method names and the `item` body parameter.** `register()`
+  introspects `list`, `get_element`, `create_element`,
+  `update_element`, `delete_element`. It also rewrites the
+  ``item.__annotation__`` to `response_model` so the OpenAPI body
+  schema stays consistent — use the same schema for request and
+  response, or pre-validate inside the handler.
+- **Adding new query parameters is fine** (`search`, `order_by`,
+  filters, etc.); FastAPI picks them up automatically.
+- **Manage your own session lifecycle** in overrides (`try/finally` +
+  `await session.close()`) or use a FastAPI dependency with `yield`.
+- For sync apps, the same pattern applies to `BaseViewset` — just drop
+  the `async`/`await` and use `Session` instead of `AsyncSession`.
+
 ## Authentication example
 
 `register()` accepts `OAuth2PasswordBearer` plus a list of logical operations (`POST`, `PUT`, …) that require a bearer token.
