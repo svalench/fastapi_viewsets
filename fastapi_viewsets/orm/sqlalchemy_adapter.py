@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.declarative import DeclarativeMeta
 from sqlalchemy import select
 
+from fastapi_viewsets._compat import to_async_database_url
 from fastapi_viewsets.orm.base import BaseORMAdapter, ModelType
 
 try:
@@ -90,14 +91,7 @@ class SQLAlchemyAdapter(BaseORMAdapter):
     
     def _get_async_database_url(self) -> str:
         """Convert database URL to async-compatible format."""
-        url = self.database_url
-        if url.startswith('sqlite:///'):
-            return url.replace('sqlite:///', 'sqlite+aiosqlite:///', 1)
-        elif url.startswith('postgresql://'):
-            return url.replace('postgresql://', 'postgresql+asyncpg://', 1)
-        elif url.startswith('mysql://'):
-            return url.replace('mysql://', 'mysql+aiomysql://', 1)
-        return url
+        return to_async_database_url(self.database_url)
     
     def get_session(self) -> Session:
         """Get synchronous database session."""

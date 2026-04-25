@@ -2,15 +2,17 @@
 
 import os
 from typing import Optional, Dict, Any
+
 from dotenv import load_dotenv
 
+from fastapi_viewsets._compat import to_async_database_url
 from fastapi_viewsets.constants import BASE_DIR
 from fastapi_viewsets.orm.base import BaseORMAdapter
 
 # Load environment variables
 load_dotenv(f"{BASE_DIR}.env")
 
-# Global adapter instance
+# Global adapter instance (single source of truth)
 _default_adapter: Optional[BaseORMAdapter] = None
 
 
@@ -80,15 +82,10 @@ class ORMFactory:
             if not database_url:
                 database_url = f"sqlite:///{BASE_DIR}base.db"
             
-            async_database_url = os.getenv('SQLALCHEMY_ASYNC_DATABASE_URL')
-            if not async_database_url:
-                # Auto-convert sync URL to async
-                if database_url.startswith('sqlite:///'):
-                    async_database_url = database_url.replace('sqlite:///', 'sqlite+aiosqlite:///', 1)
-                elif database_url.startswith('postgresql://'):
-                    async_database_url = database_url.replace('postgresql://', 'postgresql+asyncpg://', 1)
-                elif database_url.startswith('mysql://'):
-                    async_database_url = database_url.replace('mysql://', 'mysql+aiomysql://', 1)
+            async_database_url = (
+                os.getenv('SQLALCHEMY_ASYNC_DATABASE_URL')
+                or to_async_database_url(database_url)
+            )
             
             config = {
                 'database_url': database_url,
@@ -136,7 +133,7 @@ class ORMFactory:
     @classmethod
     def get_default_adapter(cls) -> BaseORMAdapter:
         """Get or create default adapter instance.
-        
+
         Returns:
             Default ORM adapter instance (singleton)
         """
@@ -144,6 +141,17 @@ class ORMFactory:
         if _default_adapter is None:
             _default_adapter = cls.get_adapter_from_env()
         return _default_adapter
+
+    @classmethod
+    def reset_default_adapter(cls) -> None:
+        """Reset the cached default adapter.
+
+        Intended for tests and for applications that hot-reload
+        configuration. The next call to :meth:`get_default_adapter` will
+        rebuild the adapter from environment variables.
+        """
+        global _default_adapter
+        _default_adapter = None
 
 
 # Register built-in adapters

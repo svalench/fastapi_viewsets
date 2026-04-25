@@ -1,5 +1,41 @@
 # Release Notes
 
+## Version 1.2.0
+
+### ✨ Highlights
+
+- **Pydantic v2 first**. CRUD handlers serialize bodies with
+  `model_dump(exclude_unset=...)`, fixing PATCH semantics so unset
+  fields are no longer overwritten with defaults.
+- **Lazy `db_conf`**. Importing `fastapi_viewsets` no longer creates
+  SQLAlchemy engines unless they are accessed, and no longer fails
+  when an async driver such as `aiosqlite` is missing.
+- **Single source of truth** for sync→async URL conversion
+  (`to_async_database_url`) and for the default ORM adapter singleton
+  (`ORMFactory.get_default_adapter`).
+- **Internal refactor**. `BaseViewset.register` and
+  `AsyncBaseViewset.register` were deduplicated into a shared
+  `_RegisterMixin`. Bare `except: pass` blocks were replaced with
+  narrow guards. The no-op auth dependency `butle` was renamed to
+  `_noop_dependency` (the old name remains as an alias).
+
+### 📦 Packaging
+
+- Added PEP 621 `pyproject.toml` and trimmed `setup.py` to a shim.
+- `python_requires>=3.9`, `pydantic>=2.5,<3`, `fastapi>=0.110`.
+- Pre-configured `[tool.ruff]`, `[tool.black]`, `[tool.mypy]`, plus a
+  `lint` extra that pulls in ruff/black/mypy.
+
+### 🔄 Backward compatibility
+
+- The `butle` no-op dependency name still works.
+- Pydantic v1 schemas keep working via a transparent fallback in
+  `fastapi_viewsets._compat.model_to_dict`, but the test matrix now
+  targets Pydantic v2.
+- `BaseViewset` / `AsyncBaseViewset` public APIs are unchanged.
+
+Details: [RELEASE_1.2.0.md](RELEASE_1.2.0.md).
+
 ## Version 1.1.0
 
 ### 🎉 What's New
