@@ -189,13 +189,17 @@ class ItemsWithStats(BaseViewset):
 # Instantiate with model, response_model, and db_session (see quickstart), then call register().
 ```
 
-## What is new (v1.1.0)
+## What is new (v1.2.0)
 
-- Multi-ORM support via adapters (SQLAlchemy default, optional Tortoise and Peewee).
-- `ORMFactory` and environment-driven `ORM_TYPE` configuration.
-- Continued compatibility with existing SQLAlchemy-based apps.
+- Pydantic v2 first: CRUD handlers use `model_dump(exclude_unset=...)`, fixing PATCH semantics that previously overwrote unset fields with defaults.
+- Lazy `db_conf`: importing the package no longer creates SQLAlchemy engines unless they are needed, and works without async drivers installed.
+- Single source of truth for sync→async URL conversion and the default adapter singleton.
+- Internal `register()` deduplicated between sync and async viewsets via a shared mixin.
+- PEP 621 `pyproject.toml`, `python_requires>=3.9`, FastAPI `>=0.110`, ruff/black/mypy preconfigured.
 
-Details: [RELEASE_NOTES.md](RELEASE_NOTES.md), [RELEASE_1.1.0.md](RELEASE_1.1.0.md).
+Previous release: [v1.1.0](RELEASE_1.1.0.md) introduced multi-ORM support via adapters (SQLAlchemy default, optional Tortoise and Peewee), `ORMFactory` and environment-driven `ORM_TYPE` configuration.
+
+Details: [RELEASE_NOTES.md](RELEASE_NOTES.md), [RELEASE_1.2.0.md](RELEASE_1.2.0.md), [RELEASE_1.1.0.md](RELEASE_1.1.0.md).
 
 ## Roadmap (planned)
 

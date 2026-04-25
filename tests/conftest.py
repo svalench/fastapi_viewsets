@@ -5,7 +5,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Boolean
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.ext.declarative import declarative_base
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -48,15 +48,15 @@ class TestUser(TestBase):
 
 # Test Pydantic Schema
 class TestUserSchema(BaseModel):
-    """Test Pydantic schema - fields are optional for PATCH updates"""
+    """Test Pydantic schema - fields are optional for PATCH updates."""
+
+    model_config = ConfigDict(from_attributes=True)
+
     id: Optional[int] = None
     username: Optional[str] = None
     email: Optional[str] = None
     is_active: Optional[bool] = True
     age: Optional[int] = None
-
-    class Config:
-        orm_mode = True
 
 
 # Test Pydantic Schema for creation (without id)
