@@ -1,0 +1,210 @@
+name: Release
+
+# Pipeline:
+#   1. Push tag `vX.Y.Z` (or `X.Y.Z`)  →  build sdist + wheel
+#   2. Validate with `twine check` and a smoke install
+#   3. Create / update the matching GitHub Release with the artifacts attached
+#   4. Publish to PyPI via Trusted Publishing (OIDC) — falls back to
+#      `PYPI_API_TOKEN` when the Trusted Publisher is not yet configured
+#
+# The workflow can also be triggered manually from the Actions tab
+# (`workflow_dispatch`) with an explicit version, which is useful for
+# re-publishing a hot-fix without cutting a new tag.
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+[a-z]*[0-9]*"
+      - "[0-9]+.[0-9]+.[0-9]+"
+      - "[0-9]+.[0-9]+.[0-9]+[a-z]*[0-9]*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 1.2.0). Must match pyproject.toml."
+        required: true
+        type: string
+      publish_to_pypi:
+        description: "Publish to PyPI after building."
+        required: false
+        default: true
+        type: boolean
+
+# Cancel superseded runs for the same ref so a re-tag doesn't double-publish.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────
+  # 1. Build sdist + wheel and validate metadata
+  # ──────────────────────────────────────────────────────────────────────
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Resolve target version
+        id: resolve
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ inputs.version }}"
+          else
+            # Strip optional leading "v" from refs/tags/<tag>
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          echo "Resolved version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Verify pyproject.toml version matches
+        run: |
+          set -euo pipefail
+          PYPROJECT_VERSION="$(python -c '
+          import sys
+          try:
+              import tomllib
+          except ModuleNotFoundError:
+              import tomli as tomllib
+          with open("pyproject.toml", "rb") as f:
+              print(tomllib.load(f)["project"]["version"])
+          ')"
+          echo "pyproject.toml version: $PYPROJECT_VERSION"
+          echo "Workflow version:       ${{ steps.resolve.outputs.version }}"
+          if [[ "$PYPROJECT_VERSION" != "${{ steps.resolve.outputs.version }}" ]]; then
+            echo "::error::pyproject.toml version ($PYPROJECT_VERSION) does not match release version (${{ steps.resolve.outputs.version }})."
+            echo "Bump the version in pyproject.toml and re-tag."
+            exit 1
+          fi
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Inspect dist/
+        run: ls -l dist/
+
+      - name: Validate package metadata
+        run: twine check --strict dist/*
+
+      - name: Smoke-test the wheel in a clean venv
+        run: |
+          set -euo pipefail
+          python -m venv /tmp/smoke
+          /tmp/smoke/bin/pip install --upgrade pip
+          /tmp/smoke/bin/pip install dist/*.whl
+          /tmp/smoke/bin/python -c "import fastapi_viewsets, sys; print('imported', fastapi_viewsets.__name__)"
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────────────
+  # 2. Create / update the GitHub Release with built artifacts
+  # ──────────────────────────────────────────────────────────────────────
+  github-release:
+    name: GitHub Release
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Pick release notes file
+        id: notes
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.build.outputs.version }}"
+          if [[ -f "RELEASE_${VERSION}.md" ]]; then
+            echo "file=RELEASE_${VERSION}.md" >> "$GITHUB_OUTPUT"
+          elif [[ -f "RELEASE_NOTES.md" ]]; then
+            echo "file=RELEASE_NOTES.md" >> "$GITHUB_OUTPUT"
+          else
+            echo "file=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ needs.build.outputs.version }}
+          body_path: ${{ steps.notes.outputs.file }}
+          generate_release_notes: ${{ steps.notes.outputs.file == '' }}
+          draft: false
+          prerelease: ${{ contains(needs.build.outputs.version, 'a') || contains(needs.build.outputs.version, 'b') || contains(needs.build.outputs.version, 'rc') }}
+          files: dist/*
+          fail_on_unmatched_files: true
+
+  # ──────────────────────────────────────────────────────────────────────
+  # 3. Publish to PyPI via Trusted Publishing (OIDC) with token fallback
+  # ──────────────────────────────────────────────────────────────────────
+  pypi-publish:
+    name: Publish to PyPI
+    needs: build
+    if: github.event_name == 'push' || inputs.publish_to_pypi
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/fastapi-viewsets/${{ needs.build.outputs.version }}/
+    permissions:
+      contents: read
+      id-token: write   # required for Trusted Publishing (OIDC)
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      # Preferred path — Trusted Publisher configured on PyPI.
+      # See TRUSTED_PUBLISHER_SETUP.md.
+      - name: Publish via Trusted Publishing
+        if: ${{ !vars.USE_PYPI_TOKEN }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          print-hash: true
+          skip-existing: false
+
+      # Fallback path — repository variable USE_PYPI_TOKEN=true forces
+      # legacy API-token uploads. Useful while the Trusted Publisher is
+      # still pending on PyPI.
+      - name: Publish via API token
+        if: ${{ vars.USE_PYPI_TOKEN }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          print-hash: true
+          skip-existing: false
