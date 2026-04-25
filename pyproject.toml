@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastapi_viewsets"
-version = "1.2.0"
+version = "1.2.1"
 description = "DRF-style viewsets for FastAPI with SQLAlchemy/Tortoise/Peewee adapters and Pydantic v2 support."
 readme = "README.md"
 license = { text = "MIT" }
@@ -51,8 +51,10 @@ Homepage = "https://github.com/svalench/fastapi_viewsets"
 Issues = "https://github.com/svalench/fastapi_viewsets/issues"
 Changelog = "https://github.com/svalench/fastapi_viewsets/blob/main/RELEASE_NOTES.md"
 
-[tool.setuptools]
-packages = ["fastapi_viewsets", "fastapi_viewsets.orm"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fastapi_viewsets*"]
+exclude = ["tests*"]
 
 [tool.black]
 line-length = 100

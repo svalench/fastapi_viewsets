@@ -1,5 +1,21 @@
 # Release Notes
 
+## Version 1.2.1
+
+### 🐛 Bugfix
+
+- **`SQLAlchemyAdapter` no longer crashes at construction** when the
+  async DB-API driver (`aiosqlite` / `asyncpg` / `aiomysql`) is missing.
+  Sync-only setups keep working out of the box; `get_async_session()`
+  raises a helpful `RuntimeError` lazily if you try to use async without
+  the driver. Regression introduced in 1.2.0 by always passing an
+  explicit `async_database_url` from `ORMFactory.get_adapter_from_env`.
+
+### 📦 Packaging
+
+- Switched to `[tool.setuptools.packages.find]` so future subpackages are
+  picked up automatically by wheel/sdist builds.
+
 ## Version 1.2.0
 
 ### ✨ Highlights

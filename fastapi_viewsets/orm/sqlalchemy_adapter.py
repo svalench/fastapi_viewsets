@@ -67,19 +67,25 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         
         self.Base.query = self.db_session.query_property()
         
-        # Setup async engine and session
+        # Setup async engine and session.
+        #
+        # The async engine is best-effort: if the matching async DB-API
+        # driver (aiosqlite, asyncpg, aiomysql, ...) is not installed we
+        # fall back to ``async_engine = None`` so that purely synchronous
+        # usage still works. The error is re-raised lazily from
+        # :meth:`get_async_session` with installation hints.
         if async_engine:
             self.async_engine = async_engine
-        elif async_database_url:
-            self.async_engine = create_async_engine(async_database_url, echo=False)
         else:
-            # Auto-convert sync URL to async
-            async_url = self._get_async_database_url()
+            async_url = async_database_url or self._get_async_database_url()
             try:
                 self.async_engine = create_async_engine(async_url, echo=False)
             except Exception:
+                # Missing async DB-API driver (aiosqlite/asyncpg/aiomysql),
+                # or no async dialect for this URL — degrade to sync-only mode.
+                # The error is re-raised lazily from ``get_async_session``.
                 self.async_engine = None
-        
+
         if self.async_engine:
             self.AsyncSessionLocal = async_sessionmaker(
                 self.async_engine,
