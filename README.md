@@ -690,11 +690,10 @@ Details: [RELEASE_NOTES.md](RELEASE_NOTES.md), [RELEASE_1.2.0.md](RELEASE_1.2.0.
 
 | Item | Target | Status |
 | --- | --- | --- |
-| Dedicated `AsyncModelViewSet` ergonomics on top of SQLAlchemy 2.x async sessions | v1.2 | Planned |
-| First-class Tortoise ORM viewset examples and docs (`TortoiseModelViewSet` naming TBD) | v1.2 | Planned |
-| Async pagination helpers and transaction boundaries across adapters | v1.3 | Planned |
-| Nested Pydantic models with automatic eager-loading | v1.3 | **Done** |
-| Wire `search` on LIST to real database queries | v1.2 | Planned |
+| Wire `search` on LIST to real database queries | v1.4 | Planned |
+| Transaction helpers (`begin` / `atomic`) across adapters | v1.4 | Planned |
+| Declarative ordering (`order_by`) on LIST endpoints | v1.4 | Planned |
+| Advanced filters (`__gt`, `__lt`, `__in`) via query params | v1.5 | Planned |
 
 ## Comparison with alternatives
 

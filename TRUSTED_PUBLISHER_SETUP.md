@@ -10,6 +10,18 @@ Token request failed: the server refused the request for the following reasons:
 
 Это означает, что Trusted Publisher не настроен в PyPI или настройки не совпадают.
 
+## Диагностика по логам
+
+Сверьтесь с логами failed job. Важные claims:
+
+| Claim | Ожидаемое значение | Что проверить |
+|-------|-------------------|---------------|
+| `repository` | `svalench/fastapi_viewsets` | Должен совпадать с owner/repo на GitHub |
+| `workflow_ref` | `.../.github/workflows/release.yml@...` | Должен совпадать с путём к workflow |
+| `environment` | `pypi` | В `release.yml` задан environment `pypi` |
+
+Если `workflow_ref` указывает на `release.yml`, а в PyPI настроен `publish.yml` — это и есть причина ошибки.
+
 ## Решение 1: Настройка Trusted Publisher в PyPI (Рекомендуется)
 
 ### Шаги настройки:
@@ -29,26 +41,27 @@ Token request failed: the server refused the request for the following reasons:
      - **Publisher type**: `GitHub`
      - **Owner**: `svalench` (ваш GitHub username)
      - **Repository name**: `fastapi_viewsets` (имя репозитория)
-     - **Workflow filename**: `.github/workflows/publish.yml` (путь к workflow файлу)
-     - **Environment name**: оставьте пустым (если не используете environments)
+     - **Workflow filename**: `.github/workflows/release.yml` ⚠️ (именно `release.yml`, не `publish.yml`)
+     - **Environment name**: `pypi` (в `release.yml` используется environment `pypi`)
 
 4. **Сохраните настройки**:
    - Нажмите "Add"
    - Publisher будет добавлен в статус "Pending"
 
 5. **Активируйте publisher**:
-   - После первого успешного запуска workflow publisher автоматически активируется
-   - Или вы можете активировать его вручную в PyPI
+   - Запушьте тег (например, `git push origin v1.3.0`)
+   - Workflow `release.yml` запустится, и publisher автоматически активируется при первом успешном обмене токенами
 
 ### Важные моменты:
 
-- **Workflow filename** должен точно совпадать с путем к файлу в репозитории
+- **Workflow filename** должен точно совпадать: `.github/workflows/release.yml`
 - **Repository name** должен совпадать с именем репозитория на GitHub (без префикса username/)
 - **Owner** должен совпадать с владельцем репозитория на GitHub
+- **Environment name** обязателен: введите `pypi` (оставить пустым не получится — в workflow environment задан явно)
 
 ## Решение 2: Использование API токена (Быстрое решение)
 
-Если вы не хотите настраивать Trusted Publishing, используйте API токен:
+Если Trusted Publishing настроить сейчас нет возможности, используйте API токен:
 
 ### Шаги:
 
@@ -68,9 +81,14 @@ Token request failed: the server refused the request for the following reasons:
    - Value: вставьте скопированный токен
    - Нажмите "Add secret"
 
-3. **Используйте workflow с токеном**:
-   - Workflow автоматически определит наличие токена и использует его
-   - Или используйте `publish-manual.yml` для ручной публикации
+3. **Переключите workflow на fallback**:
+   - Settings → Secrets and variables → Actions → Variables
+   - Нажмите "New repository variable"
+   - Name: `USE_PYPI_TOKEN`
+   - Value: `true`
+   - Нажмите "Add variable"
+
+   Workflow `release.yml` увидит `USE_PYPI_TOKEN=true` и будет использовать `PYPI_API_TOKEN` вместо Trusted Publishing.
 
 ## Проверка настройки
 
@@ -78,7 +96,8 @@ Token request failed: the server refused the request for the following reasons:
 
 - `repository`: `svalench/fastapi_viewsets` ✅
 - `repository_owner`: `svalench` ✅
-- `workflow_ref`: `svalench/fastapi_viewsets/.github/workflows/publish.yml@refs/tags/1.0.1` ✅
+- `workflow_ref`: `svalench/fastapi_viewsets/.github/workflows/release.yml@refs/tags/v1.3.0` ✅
+- `environment`: `pypi` ✅
 
 Эти значения должны совпадать с настройками в PyPI.
 
@@ -86,4 +105,3 @@ Token request failed: the server refused the request for the following reasons:
 
 - [Документация PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/)
 - [Troubleshooting Guide](https://docs.pypi.org/trusted-publishers/troubleshooting/)
-
