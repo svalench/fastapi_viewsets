@@ -2,8 +2,11 @@ from fastapi import HTTPException
 from starlette import status
 from typing import Optional, Dict, Any, Union, Type, TypeVar, List, Callable
 
+from pydantic import BaseModel
+
 from fastapi_viewsets.orm.base import BaseORMAdapter
 from fastapi_viewsets.db_conf import get_orm_adapter
+from fastapi_viewsets.serializer_utils import get_select_related, get_prefetch_related
 
 # Type variable for ORM models
 ModelType = TypeVar('ModelType')
@@ -14,7 +17,10 @@ async def get_list_queryset(
     db_session: Callable[[], Any],
     limit: Optional[int] = None,
     offset: Optional[int] = None,
-    orm_adapter: Optional[BaseORMAdapter] = None
+    orm_adapter: Optional[BaseORMAdapter] = None,
+    response_model: Optional[Type[BaseModel]] = None,
+    select_related: Optional[List[str]] = None,
+    prefetch_related: Optional[List[str]] = None,
 ) -> List[ModelType]:
     """Get list of elements from database with pagination support (async).
     
@@ -24,6 +30,9 @@ async def get_list_queryset(
         limit: Maximum number of items to return
         offset: Number of items to skip
         orm_adapter: ORM adapter instance (optional, uses default if not provided)
+        response_model: Pydantic schema that may define ``RelatedConfig``
+        select_related: Explicit list of FK relations to join (overrides schema config)
+        prefetch_related: Explicit list of collection relations to prefetch (overrides schema config)
         
     Returns:
         List of model instances
@@ -31,14 +40,26 @@ async def get_list_queryset(
     if orm_adapter is None:
         orm_adapter = get_orm_adapter()
     
-    return await orm_adapter.get_list_queryset_async(model, db_session, limit, offset)
+    if select_related is None and response_model is not None:
+        select_related = get_select_related(response_model)
+    if prefetch_related is None and response_model is not None:
+        prefetch_related = get_prefetch_related(response_model)
+    
+    return await orm_adapter.get_list_queryset_async(
+        model, db_session, limit, offset,
+        select_related=select_related or None,
+        prefetch_related=prefetch_related or None,
+    )
 
 
 async def get_element_by_id(
     model: Type[ModelType],
     db_session: Callable[[], Any],
     id: Union[int, str],
-    orm_adapter: Optional[BaseORMAdapter] = None
+    orm_adapter: Optional[BaseORMAdapter] = None,
+    response_model: Optional[Type[BaseModel]] = None,
+    select_related: Optional[List[str]] = None,
+    prefetch_related: Optional[List[str]] = None,
 ) -> ModelType:
     """Get single element by ID from database (async).
     
@@ -47,6 +68,9 @@ async def get_element_by_id(
         db_session: Async database session factory function
         id: Element ID to retrieve
         orm_adapter: ORM adapter instance (optional, uses default if not provided)
+        response_model: Pydantic schema that may define ``RelatedConfig``
+        select_related: Explicit list of FK relations to join (overrides schema config)
+        prefetch_related: Explicit list of collection relations to prefetch (overrides schema config)
         
     Returns:
         Model instance
@@ -57,7 +81,16 @@ async def get_element_by_id(
     if orm_adapter is None:
         orm_adapter = get_orm_adapter()
     
-    return await orm_adapter.get_element_by_id_async(model, db_session, id)
+    if select_related is None and response_model is not None:
+        select_related = get_select_related(response_model)
+    if prefetch_related is None and response_model is not None:
+        prefetch_related = get_prefetch_related(response_model)
+    
+    return await orm_adapter.get_element_by_id_async(
+        model, db_session, id,
+        select_related=select_related or None,
+        prefetch_related=prefetch_related or None,
+    )
 
 
 async def create_element(

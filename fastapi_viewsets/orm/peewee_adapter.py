@@ -101,14 +101,19 @@ class PeeweeAdapter(BaseORMAdapter):
         model: Type[ModelType],
         db_session: Callable[[], Any],
         limit: Optional[int] = None,
-        offset: Optional[int] = None
+        offset: Optional[int] = None,
+        select_related: Optional[List[str]] = None,
+        prefetch_related: Optional[List[str]] = None,
     ) -> List[ModelType]:
         """Get list of elements from database with pagination support (synchronous)."""
         if limit == 0:
             return []
         
         queryset = model.select()
-        
+        if select_related:
+            for rel_name in select_related:
+                related_model = getattr(model, rel_name).rel_model
+                queryset = queryset.join(related_model)
         if offset:
             queryset = queryset.offset(offset)
         if limit is not None and limit > 0:
@@ -130,11 +135,18 @@ class PeeweeAdapter(BaseORMAdapter):
         self,
         model: Type[ModelType],
         db_session: Callable[[], Any],
-        id: Union[int, str]
+        id: Union[int, str],
+        select_related: Optional[List[str]] = None,
+        prefetch_related: Optional[List[str]] = None,
     ) -> ModelType:
         """Get single element by ID from database (synchronous)."""
         try:
-            return model.get_by_id(id)
+            queryset = model.select()
+            if select_related:
+                for rel_name in select_related:
+                    related_model = getattr(model, rel_name).rel_model
+                    queryset = queryset.join(related_model)
+            return queryset.where(model.id == id).get()
         except DoesNotExist:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

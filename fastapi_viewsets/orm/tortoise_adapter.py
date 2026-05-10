@@ -87,7 +87,9 @@ class TortoiseAdapter(BaseORMAdapter):
         model: Type[ModelType],
         db_session: Callable[[], Any],
         limit: Optional[int] = None,
-        offset: Optional[int] = None
+        offset: Optional[int] = None,
+        select_related: Optional[List[str]] = None,
+        prefetch_related: Optional[List[str]] = None,
     ) -> List[ModelType]:
         """Get list of elements from database with pagination support (asynchronous)."""
         await self._ensure_initialized()
@@ -97,6 +99,10 @@ class TortoiseAdapter(BaseORMAdapter):
         
         queryset = model.all()
         
+        if select_related:
+            queryset = queryset.prefetch_related(*select_related)
+        if prefetch_related:
+            queryset = queryset.prefetch_related(*prefetch_related)
         if offset:
             queryset = queryset.offset(offset)
         if limit is not None and limit > 0:
@@ -118,13 +124,20 @@ class TortoiseAdapter(BaseORMAdapter):
         self,
         model: Type[ModelType],
         db_session: Callable[[], Any],
-        id: Union[int, str]
+        id: Union[int, str],
+        select_related: Optional[List[str]] = None,
+        prefetch_related: Optional[List[str]] = None,
     ) -> ModelType:
         """Get single element by ID from database (asynchronous)."""
         await self._ensure_initialized()
         
         try:
-            return await model.get(id=id)
+            queryset = model.filter(id=id)
+            if select_related:
+                queryset = queryset.prefetch_related(*select_related)
+            if prefetch_related:
+                queryset = queryset.prefetch_related(*prefetch_related)
+            return await queryset.first()
         except DoesNotExist:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

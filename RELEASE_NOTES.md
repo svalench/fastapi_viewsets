@@ -1,5 +1,22 @@
 # Release Notes
 
+## Version 1.3.0
+
+### ✨ Highlights
+
+- **Declarative eager loading** via `RelatedConfig` inside Pydantic schemas.  
+  Add `select_related = [...]` and/or `prefetch_related = [...]` to a schema's inner `RelatedConfig` class, and `BaseViewset` / `AsyncBaseViewset` automatically applies `joinedload` / `selectinload` (SQLAlchemy) or `prefetch_related` (Tortoise) on `LIST` and `GET` endpoints. This eliminates N+1 queries without duplicating configuration between schemas and viewsets.
+- **Adapter-level support** for `select_related` and `prefetch_related` across all built-in ORM adapters (SQLAlchemy sync/async, Tortoise, Peewee).
+- **Low-level utility integration**: `get_list_queryset`, `get_element_by_id`, and their async counterparts accept `response_model`, `select_related`, and `prefetch_related`. When `response_model` is provided and explicit lists are omitted, the utilities read them automatically from `RelatedConfig`.
+- **Full backward compatibility**: all new parameters default to `None`; existing code and tests work unchanged.
+
+### 🧪 Testing
+
+- New dedicated test suite: `tests/test_select_prefetch_related.py` covering `serializer_utils`, SQLAlchemy sync/async adapters, and utility integration.
+- 258+ tests pass, coverage above the 70% gate.
+
+Details: [RELEASE_1.3.0.md](RELEASE_1.3.0.md).
+
 ## Version 1.2.1
 
 ### 🐛 Bugfix

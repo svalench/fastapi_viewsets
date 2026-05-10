@@ -103,6 +103,7 @@ class BaseViewset(_RegisterMixin, APIRouter):
             limit=limit,
             offset=offset,
             orm_adapter=self.orm_adapter,
+            response_model=self.response_model,
         )
 
     def get_element(
@@ -124,6 +125,7 @@ class BaseViewset(_RegisterMixin, APIRouter):
             db_session=self.db_session,
             id=id,
             orm_adapter=self.orm_adapter,
+            response_model=self.response_model,
         )
 
     def create_element(

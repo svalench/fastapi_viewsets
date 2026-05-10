@@ -51,7 +51,9 @@ class BaseORMAdapter(ABC):
         model: Type[ModelType],
         db_session: Callable[[], Any],
         limit: Optional[int] = None,
-        offset: Optional[int] = None
+        offset: Optional[int] = None,
+        select_related: Optional[List[str]] = None,
+        prefetch_related: Optional[List[str]] = None,
     ) -> List[ModelType]:
         """Get list of elements from database with pagination support (synchronous).
         
@@ -72,7 +74,9 @@ class BaseORMAdapter(ABC):
         model: Type[ModelType],
         db_session: Callable[[], Any],
         limit: Optional[int] = None,
-        offset: Optional[int] = None
+        offset: Optional[int] = None,
+        select_related: Optional[List[str]] = None,
+        prefetch_related: Optional[List[str]] = None,
     ) -> List[ModelType]:
         """Get list of elements from database with pagination support (asynchronous).
         
@@ -92,7 +96,9 @@ class BaseORMAdapter(ABC):
         self,
         model: Type[ModelType],
         db_session: Callable[[], Any],
-        id: Union[int, str]
+        id: Union[int, str],
+        select_related: Optional[List[str]] = None,
+        prefetch_related: Optional[List[str]] = None,
     ) -> ModelType:
         """Get single element by ID from database (synchronous).
         
@@ -114,7 +120,9 @@ class BaseORMAdapter(ABC):
         self,
         model: Type[ModelType],
         db_session: Callable[[], Any],
-        id: Union[int, str]
+        id: Union[int, str],
+        select_related: Optional[List[str]] = None,
+        prefetch_related: Optional[List[str]] = None,
     ) -> ModelType:
         """Get single element by ID from database (asynchronous).
         

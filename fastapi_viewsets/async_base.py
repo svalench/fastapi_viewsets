@@ -94,6 +94,7 @@ class AsyncBaseViewset(_RegisterMixin, APIRouter):
             limit=limit,
             offset=offset,
             orm_adapter=self.orm_adapter,
+            response_model=self.response_model,
         )
 
     async def get_element(
@@ -115,6 +116,7 @@ class AsyncBaseViewset(_RegisterMixin, APIRouter):
             db_session=self.db_session,
             id=id,
             orm_adapter=self.orm_adapter,
+            response_model=self.response_model,
         )
 
     async def create_element(

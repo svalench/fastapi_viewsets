@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.declarative import DeclarativeMeta
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload, selectinload
 
 from fastapi_viewsets._compat import to_async_database_url
 from fastapi_viewsets.orm.base import BaseORMAdapter, ModelType
@@ -124,7 +125,9 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         model: Type[ModelType],
         db_session: Callable[[], Session],
         limit: Optional[int] = None,
-        offset: Optional[int] = None
+        offset: Optional[int] = None,
+        select_related: Optional[List[str]] = None,
+        prefetch_related: Optional[List[str]] = None,
     ) -> List[ModelType]:
         """Get list of elements from database with pagination support (synchronous)."""
         db = db_session()
@@ -133,6 +136,12 @@ class SQLAlchemyAdapter(BaseORMAdapter):
                 return []
             
             queryset = db.query(model)
+            if select_related:
+                for rel_name in select_related:
+                    queryset = queryset.options(joinedload(getattr(model, rel_name)))
+            if prefetch_related:
+                for rel_name in prefetch_related:
+                    queryset = queryset.options(selectinload(getattr(model, rel_name)))
             if limit is not None and limit > 0:
                 queryset = queryset.limit(limit)
             if offset:
@@ -146,7 +155,9 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         model: Type[ModelType],
         db_session: Callable[[], AsyncSession],
         limit: Optional[int] = None,
-        offset: Optional[int] = None
+        offset: Optional[int] = None,
+        select_related: Optional[List[str]] = None,
+        prefetch_related: Optional[List[str]] = None,
     ) -> List[ModelType]:
         """Get list of elements from database with pagination support (asynchronous)."""
         db = db_session()
@@ -155,12 +166,18 @@ class SQLAlchemyAdapter(BaseORMAdapter):
                 return []
             
             stmt = select(model)
+            if select_related:
+                for rel_name in select_related:
+                    stmt = stmt.options(joinedload(getattr(model, rel_name)))
+            if prefetch_related:
+                for rel_name in prefetch_related:
+                    stmt = stmt.options(selectinload(getattr(model, rel_name)))
             if limit is not None and limit > 0:
                 stmt = stmt.limit(limit)
             if offset:
                 stmt = stmt.offset(offset)
             result = await db.execute(stmt)
-            return list(result.scalars().all())
+            return list(result.unique().scalars().all())
         finally:
             await db.close()
     
@@ -168,12 +185,21 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         self,
         model: Type[ModelType],
         db_session: Callable[[], Session],
-        id: Union[int, str]
+        id: Union[int, str],
+        select_related: Optional[List[str]] = None,
+        prefetch_related: Optional[List[str]] = None,
     ) -> ModelType:
         """Get single element by ID from database (synchronous)."""
         db = db_session()
         try:
-            result = db.query(model).filter(getattr(model, 'id') == id).first()
+            queryset = db.query(model)
+            if select_related:
+                for rel_name in select_related:
+                    queryset = queryset.options(joinedload(getattr(model, rel_name)))
+            if prefetch_related:
+                for rel_name in prefetch_related:
+                    queryset = queryset.options(selectinload(getattr(model, rel_name)))
+            result = queryset.filter(getattr(model, 'id') == id).first()
             if not result:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -187,14 +213,22 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         self,
         model: Type[ModelType],
         db_session: Callable[[], AsyncSession],
-        id: Union[int, str]
+        id: Union[int, str],
+        select_related: Optional[List[str]] = None,
+        prefetch_related: Optional[List[str]] = None,
     ) -> ModelType:
         """Get single element by ID from database (asynchronous)."""
         db = db_session()
         try:
             stmt = select(model).where(getattr(model, 'id') == id)
+            if select_related:
+                for rel_name in select_related:
+                    stmt = stmt.options(joinedload(getattr(model, rel_name)))
+            if prefetch_related:
+                for rel_name in prefetch_related:
+                    stmt = stmt.options(selectinload(getattr(model, rel_name)))
             result = await db.execute(stmt)
-            element = result.scalar_one_or_none()
+            element = result.unique().scalar_one_or_none()
             if not element:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,

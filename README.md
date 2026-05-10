@@ -17,6 +17,7 @@ Django REST Framework-style ViewSets for FastAPI — auto-generate CRUD endpoint
 - **Less boilerplate** — register LIST, GET, POST, PUT, PATCH, and DELETE from one class.
 - **ORM-agnostic core** — pluggable adapters for SQLAlchemy (sync/async), Tortoise ORM, and Peewee (`ORM_TYPE` / optional extras).
 - **Typed, Pydantic-first responses** with OpenAPI tags and schemas generated from your `response_model`.
+- **Declarative eager loading** (`select_related` / `prefetch_related`) via an inner `RelatedConfig` class on Pydantic schemas — eliminates N+1 without touching the viewset.
 - **Built-in list pagination** (`limit` / `offset`), optional OAuth2 on selected operations, and room to grow for search and richer filters (see Roadmap).
 
 ## Feature matrix
@@ -26,6 +27,7 @@ Django REST Framework-style ViewSets for FastAPI — auto-generate CRUD endpoint
 | `BaseViewset` / `AsyncBaseViewset` CRUD | Supported | Supported (`AsyncBaseViewset`) | Supported via adapter + async session | Supported via adapter |
 | `limit` / `offset` on LIST | Supported | Supported | Supported | Supported |
 | OAuth2 on selected methods (`register`) | Supported | Supported | Supported | Supported |
+| Declarative eager loading (`select_related` / `prefetch_related`) | Supported | Supported | Supported (`prefetch_related`) | Supported (`select_related`) |
 | `search` query on LIST (server-side) | **Roadmap** | **Roadmap** | **Roadmap** | **Roadmap** |
 | Declarative ordering / advanced filters | **Roadmap** | **Roadmap** | **Roadmap** | **Roadmap** |
 
@@ -298,6 +300,63 @@ if __name__ == "__main__":
 ```
 
 `GET /items` returns `200` with a JSON list (possibly empty). Use `POST /items` with `{"name": "apple"}` to create rows.
+
+## Eager loading (`select_related` / `prefetch_related`)
+
+If your Pydantic schema includes nested models (e.g. `author: UserSchema`), SQLAlchemy will normally emit extra queries for every row (the classic **N+1** problem). You can fix this declaratively by adding an inner `RelatedConfig` class to the schema:
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+
+class AuthorSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+
+
+class PostSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    title: str
+    author: AuthorSchema          # nested model → signals the need for a join
+
+    class RelatedConfig:
+        select_related = ["author"]   # FK / many-to-one  → one JOIN query
+        prefetch_related = ["tags"]   # collections / M2M → separate SELECT IN
+```
+
+When `PostSchema` is passed as `response_model` to a viewset, `LIST` and `GET` automatically apply the correct eager-loading strategy:
+
+```python
+posts = AsyncBaseViewset(
+    endpoint="/posts",
+    model=Post,
+    response_model=PostSchema,
+    db_session=get_async_session,
+)
+```
+
+- `select_related` — `joinedload` in SQLAlchemy (single query, FK side).  
+- `prefetch_related` — `selectinload` in SQLAlchemy (two queries, collection side, no Cartesian product).  
+- Tortoise ORM uses its native `prefetch_related()` for both lists.  
+- Peewee uses `.join()` for `select_related`.
+
+You can also override the config per-call when using the low-level utilities directly:
+
+```python
+from fastapi_viewsets.async_utils import get_list_queryset
+
+posts = await get_list_queryset(
+    Post,
+    db_session=get_async_session,
+    response_model=PostSchema,
+    select_related=["author"],
+    prefetch_related=["tags", "comments"],
+)
+```
+
+> **Backward compatibility:** all new parameters default to `None`. Existing code and tests continue to work unchanged.
 
 ## Async quickstart (SQLAlchemy 2.x + Pydantic v2)
 
@@ -606,7 +665,16 @@ class ItemsWithStats(BaseViewset):
 # Instantiate with model, response_model, and db_session (see quickstart), then call register().
 ```
 
-## What is new (v1.2.0)
+## What is new
+
+### v1.3.0
+
+- **Declarative eager loading** via `RelatedConfig` inside Pydantic schemas.  
+  Add `select_related = [...]` and/or `prefetch_related = [...]` to a schema's inner `RelatedConfig` class, and `BaseViewset` / `AsyncBaseViewset` automatically applies `joinedload` / `selectinload` (SQLAlchemy) or `prefetch_related` (Tortoise) on `LIST` and `GET` endpoints. This eliminates N+1 queries without duplicating configuration between schemas and viewsets.
+- All adapter methods (`get_list_queryset`, `get_element_by_id`, and their async counterparts) accept optional `select_related` and `prefetch_related` arguments for explicit overrides.
+- Full backward compatibility: new parameters default to `None`; existing code works unchanged.
+
+### v1.2.0
 
 - Pydantic v2 first: CRUD handlers use `model_dump(exclude_unset=...)`, fixing PATCH semantics that previously overwrote unset fields with defaults.
 - Lazy `db_conf`: importing the package no longer creates SQLAlchemy engines unless they are needed, and works without async drivers installed.
@@ -625,7 +693,7 @@ Details: [RELEASE_NOTES.md](RELEASE_NOTES.md), [RELEASE_1.2.0.md](RELEASE_1.2.0.
 | Dedicated `AsyncModelViewSet` ergonomics on top of SQLAlchemy 2.x async sessions | v1.2 | Planned |
 | First-class Tortoise ORM viewset examples and docs (`TortoiseModelViewSet` naming TBD) | v1.2 | Planned |
 | Async pagination helpers and transaction boundaries across adapters | v1.3 | Planned |
-| Richer OpenAPI for nested Pydantic models | v1.3 | Planned |
+| Nested Pydantic models with automatic eager-loading | v1.3 | **Done** |
 | Wire `search` on LIST to real database queries | v1.2 | Planned |
 
 ## Comparison with alternatives
