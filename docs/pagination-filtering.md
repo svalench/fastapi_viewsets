@@ -37,6 +37,9 @@ Until then, subclass `BaseViewset` or `AsyncBaseViewset` and override `list()` w
 ```python
 from typing import List, Optional
 
+from fastapi import Depends
+from sqlalchemy import select
+
 from fastapi_viewsets import AsyncBaseViewset
 
 
@@ -46,7 +49,7 @@ class ItemsWithSearch(AsyncBaseViewset):
         limit: int = 20,
         offset: int = 0,
         search: Optional[str] = None,
-        token: Optional[str] = None,
+        token: Optional[str] = Depends(lambda: None),
     ) -> list:
         """Custom LIST with case-insensitive search."""
         session = self.db_session()
@@ -70,8 +73,14 @@ There is no built-in `order_by` helper yet. Override `list()` with an ordered qu
 ```python
 from sqlalchemy import select
 
+
 class OrderedItems(AsyncBaseViewset):
-    async def list(self, limit: int = 10, offset: int = 0, token: str = None):
+    async def list(
+        self,
+        limit: int = 10,
+        offset: int = 0,
+        token: Optional[str] = Depends(lambda: None),
+    ):
         session = self.db_session()
         try:
             stmt = select(self.model).order_by(self.model.created_at.desc())

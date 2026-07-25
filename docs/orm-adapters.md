@@ -120,18 +120,19 @@ pip install "fastapi-viewsets[tortoise]" aiomysql
 ### Usage
 
 ```python
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from tortoise import Tortoise
 
 from fastapi_viewsets import AsyncBaseViewset
 from fastapi_viewsets.orm.factory import ORMFactory
 
-app = FastAPI()
 adapter = ORMFactory.get_default_adapter()  # built from the env vars above
 
 
-@app.on_event("startup")
-async def _init_tortoise() -> None:
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     """Open the Tortoise connection pool and create schema if needed.
 
     The adapter also initializes Tortoise lazily on first DB call;
@@ -142,12 +143,11 @@ async def _init_tortoise() -> None:
         modules={adapter.app_label: adapter.models},
     )
     await Tortoise.generate_schemas(safe=True)
-
-
-@app.on_event("shutdown")
-async def _close_tortoise() -> None:
-    """Close the Tortoise connection pool."""
+    yield
     await Tortoise.close_connections()
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 # Define your Tortoise models in app/models.py and pass them to AsyncBaseViewset.

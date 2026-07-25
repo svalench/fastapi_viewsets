@@ -9,7 +9,7 @@
 | Approach | Developer experience | ORM support | Permissions | Filtering |
 | --- | --- | --- | --- | --- |
 | **fastapi-viewsets** | One `BaseViewset` registers CRUD routes | SQLAlchemy sync/async, Tortoise, Peewee via adapters | OAuth2 per logical method via `register` | `limit`/`offset` today; `search` and advanced filters on Roadmap |
-| fastapi-crudrouter | CRUD-focused generators, less ViewSet-shaped | Primarily SQLAlchemy | Custom middleware/deps | Often extended manually |
+| fastapi-crudrouter | CRUD-focused generators, less ViewSet-shaped | SQLAlchemy, Tortoise, Ormar, Gino, databases | Custom middleware/deps | Often extended manually |
 | Hand-rolled FastAPI | Full control, most boilerplate | Any ORM you integrate | Fully custom | Fully custom |
 
 ## When to use fastapi-viewsets

@@ -15,8 +15,6 @@
 - Internal `register()` deduplicated between sync and async viewsets via a shared mixin.
 - PEP 621 `pyproject.toml`, `python_requires>=3.9`, FastAPI `>=0.110`, ruff/black/mypy preconfigured.
 
-## v1.2.1
-
 - If the async driver (`aiosqlite` / `asyncpg` / `aiomysql`) is not installed, `SQLAlchemyAdapter` falls back to sync-only mode and `get_async_session()` raises a helpful `RuntimeError`.
 
 ## v1.1.0
@@ -28,5 +26,5 @@
 
 - [GitHub releases](https://github.com/svalench/fastapi_viewsets/releases)
 - [PyPI](https://pypi.org/project/fastapi-viewsets/)
-- [Release notes (v1.2.0)](https://github.com/svalench/fastapi_viewsets/blob/main/RELEASE_1.2.0.md)
-- [Release notes (v1.1.0)](https://github.com/svalench/fastapi_viewsets/blob/main/RELEASE_1.1.0.md)
+- [Release notes (v1.2.0)](https://github.com/svalench/fastapi_viewsets/blob/master/RELEASE_1.2.0.md)
+- [Release notes (v1.1.0)](https://github.com/svalench/fastapi_viewsets/blob/master/RELEASE_1.1.0.md)

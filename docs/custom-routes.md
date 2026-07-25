@@ -47,9 +47,9 @@ The internal `register()` method already sorts `LIST` before `GET` for this reas
 Example with role-based access:
 
 ```python
-from typing import Optional
+from typing import Optional, Union
 
-from fastapi import HTTPException, status
+from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
 from fastapi_viewsets import AsyncBaseViewset
@@ -57,16 +57,25 @@ from fastapi_viewsets import AsyncBaseViewset
 oauth2 = OAuth2PasswordBearer(tokenUrl="/token")
 
 
+def _noop() -> None:
+    """Placeholder dependency when OAuth2 is not active."""
+    return None
+
+
 class AdminOnlyDelete(AsyncBaseViewset):
     """Only admin users can DELETE; reads are public."""
 
+    # NOTE: ``get_current_user`` is your own helper that decodes the JWT
+    # and returns a user object with an ``is_admin`` flag.
+    # Replace it with your actual authentication dependency.
+
     async def delete_element(
         self,
-        id: int | str,
-        token: str = None,  # injected via oauth_protect
+        id: Union[int, str],
+        token: Optional[str] = Depends(oauth2),
     ) -> dict:
         # Validate the token and check role
-        user = await get_current_user(token)
+        user = await get_current_user(token)  # your dependency/helper
         if not user.is_admin:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,

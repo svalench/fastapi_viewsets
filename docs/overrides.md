@@ -20,6 +20,7 @@ This example subclasses `AsyncBaseViewset` and overrides both `list` (case-insen
 from typing import List, Optional
 
 from fastapi import Body, HTTPException, status
+from fastapi import Depends
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Column, DateTime, Integer, String, func, select
 from sqlalchemy.exc import IntegrityError
@@ -63,7 +64,7 @@ class ItemsViewSet(AsyncBaseViewset):
         offset: int = 0,
         search: Optional[str] = None,
         order_by: str = "-created_at",
-        token: Optional[str] = None,
+        token: Optional[str] = Depends(lambda: None),
     ) -> List[ItemSchema]:
         """Custom LIST: case-insensitive search + whitelist ordering.
 
@@ -91,7 +92,7 @@ class ItemsViewSet(AsyncBaseViewset):
     async def create_element(  # type: ignore[override]
         self,
         item: ItemSchema = Body(...),
-        token: Optional[str] = None,
+        token: Optional[str] = Depends(lambda: None),
     ) -> ItemSchema:
         """Custom POST: normalize, persist, map IntegrityError to 409."""
         # Pydantic v2 dump; ``str_strip_whitespace`` already trimmed strings.

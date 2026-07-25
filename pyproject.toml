@@ -51,7 +51,7 @@ docs = ["mkdocs>=1.6", "mkdocs-material>=9.5", "pymdown-extensions>=10.7"]
 Homepage = "https://github.com/svalench/fastapi_viewsets"
 Documentation = "https://svalench.github.io/fastapi_viewsets/"
 Issues = "https://github.com/svalench/fastapi_viewsets/issues"
-Changelog = "https://github.com/svalench/fastapi_viewsets/blob/main/RELEASE_NOTES.md"
+Changelog = "https://github.com/svalench/fastapi_viewsets/blob/master/RELEASE_NOTES.md"
 
 [tool.setuptools.packages.find]
 where = ["."]

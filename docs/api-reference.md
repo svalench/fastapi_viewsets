@@ -49,6 +49,14 @@ def list(
 
 List items with `limit`/`offset` pagination. Returns a list of `response_model` instances.
 
+!!! warning "`search` parameter is reserved"
+
+    The `search` parameter is accepted by `list()` and appears in the
+    OpenAPI schema, but ORM adapters currently ignore it. Server-side
+    search is planned for v1.4. Until then, override `list()` in a
+    subclass to implement filtering — see
+    [Pagination & Filtering](pagination-filtering.md).
+
 #### `get_element()`
 
 ```python
@@ -176,7 +184,10 @@ Central entry point for adapter resolution.
 | Method | Returns | Description |
 | --- | --- | --- |
 | `get_default_adapter()` | `BaseORMAdapter` | Returns the cached singleton adapter for the current `ORM_TYPE` |
-| `create_adapter(orm_type, config)` | `BaseORMAdapter` | Creates a new adapter from a dict config |
+| `create_adapter(orm_type, config)` | `BaseORMAdapter` | Creates a new adapter instance from a dict config |
+| `register_adapter(orm_type, adapter_class)` | `None` | Registers a custom adapter class (e.g. for a new ORM) |
+| `get_adapter_from_env()` | `BaseORMAdapter` | Builds an adapter from environment variables (used internally by `get_default_adapter`) |
+| `reset_default_adapter()` | `None` | Clears the cached singleton; the next `get_default_adapter()` call rebuilds from env. Useful in tests and hot-reload scenarios. |
 
 ---
 
@@ -244,6 +255,31 @@ from fastapi_viewsets.db_conf import (
 ### Lazy resolution
 
 SQLAlchemy globals (`engine`, `Base`, `get_session`, `get_async_session`, etc.) are resolved lazily on first access. Importing the package does not create engines unless they are needed, and works without async drivers installed.
+
+---
+
+## Serializer utilities
+
+```python
+from fastapi_viewsets.serializer_utils import get_select_related, get_prefetch_related
+```
+
+These helpers read eager-loading configuration from a Pydantic schema's inner `RelatedConfig` class. They are used internally by `get_list_queryset` and `get_element_by_id` (sync and async) when a `response_model` is provided.
+
+| Function | Returns | Description |
+| --- | --- | --- |
+| `get_select_related(response_model)` | `List[str]` | Reads `RelatedConfig.select_related` (FK / many-to-one relations) |
+| `get_prefetch_related(response_model)` | `List[str]` | Reads `RelatedConfig.prefetch_related` (collections / M2M relations) |
+
+See [Eager Loading](eager-loading.md) for usage examples.
+
+---
+
+## Internal auth placeholder
+
+The `token` parameter on every CRUD handler defaults to `Depends(_noop_dependency)`, where `_noop_dependency` is a private function that returns `None`. It is overridden when `oauth_protect` is passed to `register()`. The backward-compatible alias `butle` also points to this function.
+
+You should not import `_noop_dependency` directly. If you override a handler and want to preserve the optional-auth behaviour, use `Depends(lambda: None)` or your own no-op dependency.
 
 ---
 

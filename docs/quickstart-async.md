@@ -34,9 +34,12 @@ SQLALCHEMY_DATABASE_URL=sqlite:///./test.db
 ## Full example
 
 ```python
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Column, Integer, String
+from typing import Optional
 
 from fastapi_viewsets import AsyncBaseViewset
 from fastapi_viewsets.db_conf import (
@@ -45,7 +48,16 @@ from fastapi_viewsets.db_conf import (
     get_async_session,
 )
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Create tables once on startup using the async engine.
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 class Item(Base):
@@ -60,15 +72,9 @@ class ItemSchema(BaseModel):
     """Pydantic v2 schema reused as request and response model."""
 
     model_config = ConfigDict(from_attributes=True)
-    id: int | None = None
+    id: Optional[int] = None
     name: str
 
-
-@app.on_event("startup")
-async def _create_tables() -> None:
-    """Create tables once on startup using the async engine."""
-    async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
 
 items = AsyncBaseViewset(

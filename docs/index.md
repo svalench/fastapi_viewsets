@@ -10,8 +10,8 @@ hide:
 
 [![PyPI version](https://badge.fury.io/py/fastapi-viewsets.svg)](https://pypi.org/project/fastapi-viewsets/)
 [![Python versions](https://img.shields.io/pypi/pyversions/fastapi-viewsets.svg)](https://pypi.org/project/fastapi-viewsets/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/svalench/fastapi_viewsets/blob/main/LICENSE)
-[![CI](https://github.com/svalench/fastapi_viewsets/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/svalench/fastapi_viewsets/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/svalench/fastapi_viewsets/blob/master/LICENSE)
+[![CI](https://github.com/svalench/fastapi_viewsets/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/svalench/fastapi_viewsets/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/svalench/fastapi_viewsets/graph/badge.svg)](https://codecov.io/gh/svalench/fastapi_viewsets)
 [![Downloads/month](https://static.pepy.tech/badge/fastapi-viewsets/month)](https://pepy.tech/project/fastapi-viewsets)
 
@@ -67,6 +67,7 @@ hide:
 from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Column, Integer, String
+from typing import Optional
 
 from fastapi_viewsets import BaseViewset
 from fastapi_viewsets.db_conf import Base, engine, get_session
@@ -82,7 +83,7 @@ class Item(Base):
 
 class ItemSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int | None = None
+    id: Optional[int] = None
     name: str
 
 

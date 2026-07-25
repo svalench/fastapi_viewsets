@@ -7,6 +7,11 @@ on:
       - "docs/**"
       - "mkdocs.yml"
       - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
   workflow_dispatch:
 
 permissions:
@@ -28,12 +33,9 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install MkDocs and Material
+      - name: Install docs dependencies
         run: |
-          pip install \
-            mkdocs \
-            mkdocs-material \
-            pymdown-extensions
+          pip install -e ".[docs]"
 
       - name: Build site
         run: mkdocs build --strict --clean
@@ -44,6 +46,7 @@ jobs:
 
   deploy:
     needs: build
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

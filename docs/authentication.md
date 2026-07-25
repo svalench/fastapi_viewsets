@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Column, Integer, String
+from typing import Optional
 from fastapi_viewsets import BaseViewset
 from fastapi_viewsets.db_conf import Base, engine, get_session
 
@@ -27,7 +28,7 @@ class ItemSchema(BaseModel):
     """Pydantic schema for Item payloads and responses."""
 
     model_config = ConfigDict(from_attributes=True)
-    id: int | None = None
+    id: Optional[int] = None
     name: str
 
 
@@ -71,7 +72,7 @@ Methods not in `protected_methods` remain publicly accessible. This lets you, fo
 You still need to implement the `/token` endpoint that issues JWT tokens. Here's a minimal example:
 
 ```python
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from jose import jwt
@@ -87,7 +88,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     access_token = jwt.encode(
         {
             "sub": form_data.username,
-            "exp": datetime.utcnow() + timedelta(hours=1),
+            "exp": datetime.now(timezone.utc) + timedelta(hours=1),
         },
         SECRET_KEY,
         algorithm=ALGORITHM,

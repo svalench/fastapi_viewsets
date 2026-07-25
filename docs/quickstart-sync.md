@@ -16,6 +16,7 @@ Save as `main.py` in an empty folder and run `python main.py` or `uvicorn main:a
 from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Column, Integer, String
+from typing import Optional
 
 from fastapi_viewsets import BaseViewset
 from fastapi_viewsets.db_conf import Base, engine, get_session

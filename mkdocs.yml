@@ -110,8 +110,6 @@ extra:
       link: https://github.com/svalench/fastapi_viewsets
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/fastapi-viewsets/
-  version:
-    provider: mike
 
 extra_css:
   - assets/custom.css
