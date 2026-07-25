@@ -1,0 +1,25 @@
+/* fastapi-viewsets docs custom styles */
+
+.md-header__title {
+  font-weight: 700;
+}
+
+.md-typeset__table td:not(:last-child),
+.md-typeset__table th:not(:last-child) {
+  padding-right: 1.2rem;
+}
+
+.md-typeset .grid.cards > ul > li {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.4rem;
+  transition: border-color 0.25s, box-shadow 0.25s;
+}
+
+.md-typeset .grid.cards > ul > li:hover {
+  border-color: var(--md-accent-fg-color);
+  box-shadow: 0 0 0.2rem var(--md-accent-fg-color);
+}
+
+.md-typeset code {
+  font-size: 0.85em;
+}

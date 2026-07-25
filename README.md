@@ -4,12 +4,15 @@ Django REST Framework-style ViewSets for FastAPI — auto-generate CRUD endpoint
 
 [![PyPI version](https://badge.fury.io/py/fastapi-viewsets.svg)](https://pypi.org/project/fastapi-viewsets/)
 [![Python versions](https://img.shields.io/pypi/pyversions/fastapi-viewsets.svg)](https://pypi.org/project/fastapi-viewsets/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/svalench/fastapi_viewsets/blob/main/LICENSE)
-[![CI](https://github.com/svalench/fastapi_viewsets/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/svalench/fastapi_viewsets/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/svalench/fastapi_viewsets/blob/master/LICENSE)
+[![CI](https://github.com/svalench/fastapi_viewsets/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/svalench/fastapi_viewsets/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/svalench/fastapi_viewsets/graph/badge.svg)](https://codecov.io/gh/svalench/fastapi_viewsets)
 [![Downloads/month](https://static.pepy.tech/badge/fastapi-viewsets/month)](https://pepy.tech/project/fastapi-viewsets)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/svalench/fastapi_viewsets/pulls)
+[![Docs](https://img.shields.io/badge/docs-svalench.github.io-blue.svg)](https://svalench.github.io/fastapi_viewsets/)
+
+**Documentation:** [https://svalench.github.io/fastapi_viewsets/](https://svalench.github.io/fastapi_viewsets/)
 
 ## Why fastapi-viewsets
 
@@ -59,7 +62,7 @@ you need, and the URL shape for **PostgreSQL**, **MySQL**, and
 | --- | --- | --- | --- |
 | **SQLAlchemy (sync)** | `psycopg[binary]` or `psycopg2-binary` | `pymysql` or `mysqlclient` | `pyodbc` + ODBC Driver 17/18 |
 | **SQLAlchemy (async)** | `asyncpg` | `aiomysql` or `asyncmy` | `aioodbc` + ODBC Driver 17/18 |
-| **Tortoise ORM** | `asyncpg` (built-in) | `aiomysql` (built-in) | Not supported by Tortoise |
+| **Tortoise ORM** | `asyncpg` (included in `[tortoise]` extra) | `aiomysql` (install separately) | Not supported by Tortoise |
 | **Peewee** | `psycopg2-binary` | `pymysql` or `mysqlclient` | Not supported by this adapter |
 
 > The `SQLAlchemyAdapter` auto-converts a sync URL to its async
@@ -142,8 +145,9 @@ TORTOISE_APP_LABEL=models
 ```
 
 ```python
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
-from tortoise import Tortoise
 
 from fastapi_viewsets import AsyncBaseViewset
 from fastapi_viewsets.orm.factory import ORMFactory
@@ -152,24 +156,19 @@ app = FastAPI()
 adapter = ORMFactory.get_default_adapter()  # built from the env vars above
 
 
-@app.on_event("startup")
-async def _init_tortoise() -> None:
-    """Open the Tortoise connection pool and create schema if needed.
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Open the Tortoise connection pool at startup.
 
-    The adapter also initializes Tortoise lazily on first DB call;
-    doing it here gives you control over schema creation.
+    The adapter also initialises Tortoise lazily on the first DB call;
+    calling ``initialize()`` here gives you control over schema creation
+    and avoids a cold-start penalty on the first request.
     """
-    await Tortoise.init(
-        db_url=adapter.database_url,
-        modules={adapter.app_label: adapter.models},
-    )
-    await Tortoise.generate_schemas(safe=True)
+    await adapter.initialize(generate_schemas=True)
+    yield
+    await adapter.close()
 
-
-@app.on_event("shutdown")
-async def _close_tortoise() -> None:
-    """Close the Tortoise connection pool."""
-    await Tortoise.close_connections()
+app = FastAPI(lifespan=lifespan)
 
 
 # Define your Tortoise models in app/models.py and pass them to AsyncBaseViewset.
@@ -187,6 +186,10 @@ async def _close_tortoise() -> None:
 # app.include_router(items)
 ```
 
+> **Note:** `generate_schemas=True` is convenient for development. In
+> production, use [Aerich](https://github.com/tortoise/aerich) or another
+> migration tool instead of auto-generating schemas at startup.
+>
 > **MSSQL is not supported by Tortoise ORM.** Use SQLAlchemy with
 > `aioodbc` for SQL Server.
 
@@ -265,6 +268,7 @@ Save as `main.py` in an empty folder and run `python main.py` or `uvicorn main:a
 from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Column, Integer, String
+from typing import Optional
 
 from fastapi_viewsets import BaseViewset
 from fastapi_viewsets.db_conf import Base, engine, get_session
@@ -284,7 +288,7 @@ class ItemSchema(BaseModel):
     """Pydantic model for request and response bodies."""
 
     model_config = ConfigDict(from_attributes=True)
-    id: int | None = None
+    id: Optional[int] = None
     name: str
 
 
@@ -374,9 +378,12 @@ package auto-converts `sqlite://` to `sqlite+aiosqlite://`,
 `postgresql://` to `postgresql+asyncpg://`, etc.
 
 ```python
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Column, Integer, String
+from typing import Optional
 
 from fastapi_viewsets import AsyncBaseViewset
 from fastapi_viewsets.db_conf import (
@@ -385,7 +392,16 @@ from fastapi_viewsets.db_conf import (
     get_async_session,
 )
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Create tables once on startup using the async engine."""
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 class Item(Base):
@@ -400,15 +416,8 @@ class ItemSchema(BaseModel):
     """Pydantic v2 schema reused as request and response model."""
 
     model_config = ConfigDict(from_attributes=True)
-    id: int | None = None
+    id: Optional[int] = None
     name: str
-
-
-@app.on_event("startup")
-async def _create_tables() -> None:
-    """Create tables once on startup using the async engine."""
-    async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
 
 items = AsyncBaseViewset(
@@ -575,6 +584,7 @@ from fastapi import FastAPI
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Column, Integer, String
+from typing import Optional
 from fastapi_viewsets import BaseViewset
 from fastapi_viewsets.db_conf import Base, engine, get_session
 
@@ -593,7 +603,7 @@ class ItemSchema(BaseModel):
     """Pydantic schema for Item payloads and responses."""
 
     model_config = ConfigDict(from_attributes=True)
-    id: int | None = None
+    id: Optional[int] = None
     name: str
 
 

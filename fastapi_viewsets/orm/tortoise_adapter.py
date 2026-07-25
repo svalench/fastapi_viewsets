@@ -58,6 +58,28 @@ class TortoiseAdapter(BaseORMAdapter):
             }
             await Tortoise.init(config=db_config)
             self._initialized = True
+
+    async def initialize(self, generate_schemas: bool = False) -> None:
+        """Initialize the Tortoise connection pool.
+
+        Call this in your application lifespan to explicitly open the
+        connection at startup instead of relying on lazy initialisation.
+
+        Args:
+            generate_schemas: If True, call ``Tortoise.generate_schemas(safe=True)``
+                after init. Useful for development; use Aerich in production.
+        """
+        await self._ensure_initialized()
+        if generate_schemas:
+            await Tortoise.generate_schemas(safe=True)
+
+    async def close(self) -> None:
+        """Close all Tortoise connections.
+
+        Call this in your application lifespan shutdown handler.
+        """
+        await Tortoise.close_connections()
+        self._initialized = False
     
     def get_session(self):
         """Get synchronous database session.
