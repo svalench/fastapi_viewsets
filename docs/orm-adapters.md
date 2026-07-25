@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | **SQLAlchemy (sync)** | `psycopg[binary]` or `psycopg2-binary` | `pymysql` or `mysqlclient` | `pyodbc` + ODBC Driver 17/18 |
 | **SQLAlchemy (async)** | `asyncpg` | `aiomysql` or `asyncmy` | `aioodbc` + ODBC Driver 17/18 |
-| **Tortoise ORM** | `asyncpg` (built-in) | `aiomysql` (built-in) | Not supported by Tortoise |
+| **Tortoise ORM** | `asyncpg` (included in `[tortoise]` extra) | `aiomysql` (install separately) | Not supported by Tortoise |
 | **Peewee** | `psycopg2-binary` | `pymysql` or `mysqlclient` | Not supported by this adapter |
 
 !!! note "Auto sync-to-async URL conversion"
@@ -123,7 +123,6 @@ pip install "fastapi-viewsets[tortoise]" aiomysql
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from tortoise import Tortoise
 
 from fastapi_viewsets import AsyncBaseViewset
 from fastapi_viewsets.orm.factory import ORMFactory
@@ -133,18 +132,15 @@ adapter = ORMFactory.get_default_adapter()  # built from the env vars above
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Open the Tortoise connection pool and create schema if needed.
+    """Open the Tortoise connection pool at startup.
 
-    The adapter also initializes Tortoise lazily on first DB call;
-    doing it here gives you control over schema creation.
+    The adapter also initialises Tortoise lazily on the first DB call,
+    but calling ``initialize()`` here gives you control over schema creation
+    and avoids a cold-start penalty on the first request.
     """
-    await Tortoise.init(
-        db_url=adapter.database_url,
-        modules={adapter.app_label: adapter.models},
-    )
-    await Tortoise.generate_schemas(safe=True)
+    await adapter.initialize(generate_schemas=True)
     yield
-    await Tortoise.close_connections()
+    await adapter.close()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -164,6 +160,12 @@ app = FastAPI(lifespan=lifespan)
 # items.register(methods=["LIST", "GET", "POST", "PATCH", "DELETE"])
 # app.include_router(items)
 ```
+
+!!! note "Production schema management"
+
+    `generate_schemas=True` is convenient for development. In production, use
+    [Aerich](https://github.com/tortoise/aerich) or another migration tool
+    instead of auto-generating schemas at startup.
 
 !!! warning "MSSQL not supported"
 

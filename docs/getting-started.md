@@ -18,7 +18,8 @@ pip install fastapi-viewsets
 
 ## Optional extras
 
-Install only the ORM dependencies you need:
+SQLAlchemy is a core dependency (installed automatically). The extras below
+add ORM-specific packages when you need Tortoise or Peewee:
 
 === "SQLAlchemy"
 
@@ -76,7 +77,7 @@ pip install -e ".[test,lint]"
 
 ## Verifying the installation
 
-```python
+```bash
 python -c "from fastapi_viewsets import BaseViewset, AsyncBaseViewset; print('OK')"
 ```
 

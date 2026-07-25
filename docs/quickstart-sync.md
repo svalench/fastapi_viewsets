@@ -36,7 +36,7 @@ class ItemSchema(BaseModel):
     """Pydantic model for request and response bodies."""
 
     model_config = ConfigDict(from_attributes=True)
-    id: int | None = None
+    id: Optional[int] = None
     name: str
 
 

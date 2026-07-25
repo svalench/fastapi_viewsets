@@ -16,7 +16,7 @@ GET /items?limit=10&offset=20
 
 Example:
 
-```python
+```text
 # Default: GET /items → 10 items, offset 0
 GET /items
 

@@ -71,6 +71,19 @@ Methods not in `protected_methods` remain publicly accessible. This lets you, fo
 
 You still need to implement the `/token` endpoint that issues JWT tokens. Here's a minimal example:
 
+!!! danger "Demo only — not production-ready"
+
+    The example below issues a JWT to **any** username/password pair without
+    verifying credentials. It also uses a hardcoded `SECRET_KEY`. Before
+    deploying:
+
+    - Replace the stub with real credential verification (database lookup,
+      password hashing with `passlib[bcrypt]`).
+    - Load `SECRET_KEY` from an environment variable or secrets manager.
+    - Validate `exp`, `sub`, algorithm, audience, and issuer on every
+      protected request via a dedicated dependency — `OAuth2PasswordBearer`
+      only checks for the presence of a bearer header; any string passes.
+
 ```python
 from datetime import datetime, timedelta, timezone
 from fastapi import Depends, HTTPException, status
@@ -98,10 +111,16 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 !!! tip "Dependencies"
 
-    For the token endpoint example above, install `python-jose` and `passlib`:
+    For the token endpoint example above, install `python-jose`:
 
     ```bash
-    pip install python-jose[cryptography] passlib[bcrypt]
+    pip install python-jose[cryptography]
+    ```
+
+    If you plan to hash passwords with `passlib`, install it separately:
+
+    ```bash
+    pip install passlib[bcrypt]
     ```
 
 ## Next steps
