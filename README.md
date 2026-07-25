@@ -10,6 +10,9 @@ Django REST Framework-style ViewSets for FastAPI — auto-generate CRUD endpoint
 [![Downloads/month](https://static.pepy.tech/badge/fastapi-viewsets/month)](https://pepy.tech/project/fastapi-viewsets)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/svalench/fastapi_viewsets/pulls)
+[![Docs](https://img.shields.io/badge/docs-svalench.github.io-blue.svg)](https://svalench.github.io/fastapi_viewsets/)
+
+**Documentation:** [https://svalench.github.io/fastapi_viewsets/](https://svalench.github.io/fastapi_viewsets/)
 
 ## Why fastapi-viewsets
 

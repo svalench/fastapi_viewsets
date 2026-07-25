@@ -44,7 +44,7 @@ class PostSchema(BaseModel):
         prefetch_related = ["tags"]    # M2M → separate SELECT IN
 ```
 
-No other FastAPI CRUD library offers this schema-driven approach to eager loading.
+A key differentiator of `fastapi-viewsets` is the schema-driven approach to eager loading via `RelatedConfig` — you declare eager-loading strategy on the Pydantic schema, not on the viewset or query.
 
 ## ORM adapter architecture
 

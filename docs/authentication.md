@@ -60,8 +60,9 @@ app.include_router(router)
 When a method is in `protected_methods` and `oauth_protect` is provided:
 
 1. The handler is wrapped with `functools.partial(handler, token=Depends(oauth_protect))`.
-2. FastAPI injects the `OAuth2PasswordBearer` dependency, which validates the `Authorization: Bearer <token>` header.
-3. If the token is missing or invalid, FastAPI returns `401 Unauthorized` automatically.
+2. FastAPI injects the `OAuth2PasswordBearer` dependency, which requires the `Authorization: Bearer <token>` header on protected methods.
+3. If the header is missing, FastAPI returns `401 Unauthorized` automatically.
+4. Token validation and authorization logic (e.g. decoding JWT, checking scopes) is your responsibility — implement it in a dependency or inside the handler override.
 
 Methods not in `protected_methods` remain publicly accessible. This lets you, for example, allow anonymous reads (`LIST`, `GET`) while requiring authentication for writes (`POST`, `PATCH`, `DELETE`).
 

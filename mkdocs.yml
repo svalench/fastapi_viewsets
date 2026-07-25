@@ -3,7 +3,7 @@ site_description: DRF-style ViewSets for FastAPI — auto-generate CRUD endpoint
 site_url: https://svalench.github.io/fastapi_viewsets/
 repo_url: https://github.com/svalench/fastapi_viewsets
 repo_name: svalench/fastapi_viewsets
-edit_uri: edit/main/docs/
+edit_uri: edit/master/docs/
 
 docs_dir: docs
 
