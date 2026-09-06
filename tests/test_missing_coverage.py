@@ -316,7 +316,8 @@ class TestMissingCoverage:
             assert result is True
             
             # Verify it's deleted
-            assert TestModel.get_by_id(obj_id) is None
+            with pytest.raises(TestModel.DoesNotExist):
+                TestModel.get_by_id(obj_id)
             
             # Test with non-existent id
             with pytest.raises(HTTPException) as exc_info:

@@ -280,21 +280,17 @@ class TestTortoiseAdapterExceptions:
         """Test Tortoise adapter create_element_async handles IntegrityError."""
         try:
             from fastapi_viewsets.orm.tortoise_adapter import TortoiseAdapter
-            from tortoise.models import Model
-            from tortoise import fields
-            from tortoise.exceptions import IntegrityError as TortoiseIntegrityError
+            from tests.tortoise_models import UniqueNameTortoiseModel as TestModel
             
             adapter = TortoiseAdapter(
-                database_url="sqlite:///test_tortoise_integrity.db",
-                models=[],
+                database_url="sqlite://:memory:",
+                models=["tests.tortoise_models"],
                 app_label="test"
             )
             
-            class TestModel(Model):
-                id = fields.IntField(pk=True)
-                name = fields.CharField(max_length=50, unique=True)
-            
+            from tortoise import Tortoise
             await adapter._ensure_initialized()
+            await Tortoise.generate_schemas(safe=True)
             
             # Create first record
             await TestModel.create(name="test1")
@@ -322,18 +318,13 @@ class TestTortoiseAdapterExceptions:
         """Test Tortoise adapter create_element_async handles generic Exception."""
         try:
             from fastapi_viewsets.orm.tortoise_adapter import TortoiseAdapter
-            from tortoise.models import Model
-            from tortoise import fields
+            from tests.tortoise_models import SimpleTortoiseModel as TestModel
             
             adapter = TortoiseAdapter(
-                database_url="sqlite:///test_tortoise_generic.db",
-                models=[],
+                database_url="sqlite://:memory:",
+                models=["tests.tortoise_models"],
                 app_label="test"
             )
-            
-            class TestModel(Model):
-                id = fields.IntField(pk=True)
-                name = fields.CharField(max_length=50)
             
             await adapter._ensure_initialized()
             
@@ -361,20 +352,17 @@ class TestTortoiseAdapterExceptions:
         """Test Tortoise adapter update_element_async with empty data."""
         try:
             from fastapi_viewsets.orm.tortoise_adapter import TortoiseAdapter
-            from tortoise.models import Model
-            from tortoise import fields
+            from tests.tortoise_models import SimpleTortoiseModel as TestModel
             
             adapter = TortoiseAdapter(
-                database_url="sqlite:///test_tortoise_empty.db",
-                models=[],
+                database_url="sqlite://:memory:",
+                models=["tests.tortoise_models"],
                 app_label="test"
             )
             
-            class TestModel(Model):
-                id = fields.IntField(pk=True)
-                name = fields.CharField(max_length=50)
-            
+            from tortoise import Tortoise
             await adapter._ensure_initialized()
+            await Tortoise.generate_schemas(safe=True)
             
             # Create test data
             obj = await TestModel.create(name="test")
