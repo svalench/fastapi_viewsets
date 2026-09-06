@@ -1,5 +1,18 @@
 # Release Notes
 
+## Version 1.4.0
+
+### 🐍 Python 3.14
+
+- Official Python 3.14 support: new PyPI classifier, CI matrix extended to
+  3.9 – 3.14, and the full test suite verified on 3.14.3.
+- Dependency bounds for optional adapters: `tortoise-orm>=0.20,<1.0` and
+  `peewee>=3.17,<4` (Tortoise 1.x and Peewee 4.x contain breaking changes).
+- Fixed Tortoise/Peewee adapter tests that were silently skipped or broken
+  in CI, and added a `test-extras` CI job that exercises them on 3.14.
+
+Details: [RELEASE_1.4.0.md](RELEASE_1.4.0.md).
+
 ## Version 1.3.0
 
 ### ✨ Highlights

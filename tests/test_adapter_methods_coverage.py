@@ -186,21 +186,18 @@ class TestTortoiseAdapterMethods:
         """Test Tortoise adapter get_list_queryset_async with offset."""
         try:
             from fastapi_viewsets.orm.tortoise_adapter import TortoiseAdapter
-            from tortoise.models import Model
-            from tortoise import fields
-            
+            from tests.tortoise_models import SimpleTortoiseModel as TestModel
+
             adapter = TortoiseAdapter(
-                database_url="sqlite:///test_tortoise_offset.db",
-                models=[],
+                database_url="sqlite://:memory:",
+                models=["tests.tortoise_models"],
                 app_label="test"
             )
-            
-            class TestModel(Model):
-                id = fields.IntField(pk=True)
-                name = fields.CharField(max_length=50)
-            
-            # Initialize
+
+            # Initialize and create the table
+            from tortoise import Tortoise
             await adapter._ensure_initialized()
+            await Tortoise.generate_schemas(safe=True)
             
             # Create test data
             await TestModel.create(name="test1")
@@ -228,20 +225,14 @@ class TestTortoiseAdapterMethods:
         """Test Tortoise adapter create_element_async validation."""
         try:
             from fastapi_viewsets.orm.tortoise_adapter import TortoiseAdapter
-            from tortoise.models import Model
-            from tortoise import fields
-            
+            from tests.tortoise_models import SimpleTortoiseModel as TestModel
+
             adapter = TortoiseAdapter(
-                database_url="sqlite:///test_tortoise_validation.db",
-                models=[],
+                database_url="sqlite://:memory:",
+                models=["tests.tortoise_models"],
                 app_label="test"
             )
-            
-            class TestModel(Model):
-                id = fields.IntField(pk=True)
-                name = fields.CharField(max_length=50, required=True)
-                value = fields.IntField(null=True)
-            
+
             await adapter._ensure_initialized()
             
             # Test missing required field
@@ -266,21 +257,17 @@ class TestTortoiseAdapterMethods:
         """Test Tortoise adapter update_element_async with PUT."""
         try:
             from fastapi_viewsets.orm.tortoise_adapter import TortoiseAdapter
-            from tortoise.models import Model
-            from tortoise import fields
-            
+            from tests.tortoise_models import SimpleTortoiseModel as TestModel
+
             adapter = TortoiseAdapter(
-                database_url="sqlite:///test_tortoise_put.db",
-                models=[],
+                database_url="sqlite://:memory:",
+                models=["tests.tortoise_models"],
                 app_label="test"
             )
-            
-            class TestModel(Model):
-                id = fields.IntField(pk=True)
-                name = fields.CharField(max_length=50)
-                value = fields.IntField(null=True)
-            
+
+            from tortoise import Tortoise
             await adapter._ensure_initialized()
+            await Tortoise.generate_schemas(safe=True)
             
             # Create test data
             obj = await TestModel.create(name="old", value=10)
