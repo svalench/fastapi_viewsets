@@ -394,10 +394,11 @@ class TestPeeweeSearchOrdering:
     def test_peewee_search_ordering_filters(self):
         try:
             from fastapi_viewsets.orm.peewee_adapter import PeeweeAdapter
+
+            adapter = PeeweeAdapter(database_url=FILTER_DB_URL)
         except ImportError:
             pytest.skip("Peewee not available")
 
-        adapter = PeeweeAdapter(database_url=FILTER_DB_URL)
         Base = adapter.get_base()
         from peewee import CharField, IntegerField
 
