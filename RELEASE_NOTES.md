@@ -1,5 +1,22 @@
 # Release Notes
 
+## Version 1.5.0
+
+### ✨ Search, Ordering & Filters
+
+- **Server-side `?search=` on LIST** — case-insensitive substring match
+  across schema-declared `ListConfig.search_fields`.
+- **Declarative ordering** — `?ordering=` validated against
+  `ListConfig.ordering_fields`, with declarative defaults from
+  `ListConfig.ordering`.
+- **Advanced filters** — exact match plus `ne` / `gt` / `gte` / `lt` /
+  `lte` / `contains` / `in` operators, restricted to
+  `ListConfig.filters` whitelist.
+- Works across SQLAlchemy (sync & async), Tortoise ORM and Peewee;
+  fully backward compatible (schemas without `ListConfig` unchanged).
+
+Details: [RELEASE_1.5.0.md](RELEASE_1.5.0.md).
+
 ## Version 1.4.0
 
 ### 🐍 Python 3.14

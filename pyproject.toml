@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fastapi_viewsets"
-version = "1.4.0"
+version = "1.5.0"
 description = "DRF-style viewsets for FastAPI with SQLAlchemy/Tortoise/Peewee adapters and Pydantic v2 support."
 readme = "README.md"
 license = { text = "MIT" }

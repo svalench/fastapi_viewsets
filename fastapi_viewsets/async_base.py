@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -85,9 +85,30 @@ class AsyncBaseViewset(_RegisterMixin, APIRouter):
         limit: Optional[int] = 10,
         offset: Optional[int] = 0,
         search: Optional[str] = None,
+        ordering: Optional[str] = None,
+        request: Request = None,
         token: str = Depends(_noop_dependency),
     ) -> List[ResponseModelType]:
-        """List items with ``limit``/``offset`` pagination (async)."""
+        """List items with pagination, search, ordering and filters (async).
+
+        Query parameters (behaviour is driven by the response schema's
+        ``ListConfig`` — see :mod:`fastapi_viewsets.filtering`):
+
+        * ``limit`` / ``offset`` — pagination.
+        * ``search`` — case-insensitive substring match across
+          ``ListConfig.search_fields``.
+        * ``ordering`` — comma-separated fields, ``-`` prefix for
+          descending, validated against ``ListConfig.ordering_fields``.
+        * ``<field>`` / ``<field>__<op>`` — exact and comparison filters
+          on ``ListConfig.filters`` fields.
+        """
+        from fastapi_viewsets.filtering import (
+            get_list_config,
+            parse_filters,
+            parse_ordering_param,
+        )
+
+        config = get_list_config(self.response_model)
         return await get_list_queryset(
             self.model,
             db_session=self.db_session,
@@ -95,6 +116,13 @@ class AsyncBaseViewset(_RegisterMixin, APIRouter):
             offset=offset,
             orm_adapter=self.orm_adapter,
             response_model=self.response_model,
+            search=search,
+            ordering=parse_ordering_param(
+                ordering, config.ordering_fields, config.ordering
+            ),
+            filters=parse_filters(request.query_params, config.filters)
+            if request is not None
+            else None,
         )
 
     async def get_element(

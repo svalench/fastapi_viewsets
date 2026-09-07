@@ -117,8 +117,8 @@ That's it — you now have `GET /items`, `GET /items/{id}`, `POST /items`, `PATC
 | `limit` / `offset` on LIST | ✅ | ✅ | ✅ | ✅ |
 | OAuth2 on selected methods | ✅ | ✅ | ✅ | ✅ |
 | Declarative eager loading | ✅ | ✅ | ✅ (`prefetch_related`) | ✅ (`select_related`) |
-| `search` query on LIST | Roadmap | Roadmap | Roadmap | Roadmap |
-| Declarative ordering / advanced filters | Roadmap | Roadmap | Roadmap | Roadmap |
+| `search` query on LIST | ✅ | ✅ | ✅ | ✅ |
+| Declarative ordering / advanced filters | ✅ | ✅ | ✅ | ✅ |
 
 ---
 

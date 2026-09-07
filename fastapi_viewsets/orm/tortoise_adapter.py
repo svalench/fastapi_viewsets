@@ -1,6 +1,6 @@
 """Tortoise ORM adapter implementation."""
 
-from typing import Optional, Dict, Any, Union, Type, TypeVar, List, Callable
+from typing import Optional, Dict, Any, Tuple, Union, Type, TypeVar, List, Callable
 from fastapi import HTTPException
 from starlette import status
 
@@ -112,6 +112,10 @@ class TortoiseAdapter(BaseORMAdapter):
         offset: Optional[int] = None,
         select_related: Optional[List[str]] = None,
         prefetch_related: Optional[List[str]] = None,
+        search: Optional[str] = None,
+        search_fields: Optional[List[str]] = None,
+        ordering: Optional[List[str]] = None,
+        filters: Optional[Dict[str, Tuple[str, Any]]] = None,
     ) -> List[ModelType]:
         """Get list of elements from database with pagination support (asynchronous)."""
         await self._ensure_initialized()
@@ -125,6 +129,35 @@ class TortoiseAdapter(BaseORMAdapter):
             queryset = queryset.prefetch_related(*select_related)
         if prefetch_related:
             queryset = queryset.prefetch_related(*prefetch_related)
+        if search and search_fields:
+            try:
+                from tortoise.expressions import Q  # tortoise-orm >= 0.24
+            except ImportError:  # pragma: no cover - older releases
+                from tortoise.query_utils import Q  # type: ignore
+            conditions = [
+                Q(**{f"{field_name}__icontains": search.strip()})
+                for field_name in search_fields
+            ]
+            if conditions:
+                combined = conditions[0]
+                for condition in conditions[1:]:
+                    combined = combined | condition
+                queryset = queryset.filter(combined)
+        if filters:
+            # Tortoise lookup names map 1:1 to our operators; only "eq"
+            # and "ne" need translation.
+            kwargs: Dict[str, Any] = {}
+            for field_name, (op, value) in filters.items():
+                if op == "eq":
+                    kwargs[field_name] = value
+                elif op == "ne":
+                    kwargs[f"{field_name}__not"] = value
+                else:
+                    kwargs[f"{field_name}__{op}"] = value
+            if kwargs:
+                queryset = queryset.filter(**kwargs)
+        if ordering:
+            queryset = queryset.order_by(*ordering)
         if offset:
             queryset = queryset.offset(offset)
         if limit is not None and limit > 0:

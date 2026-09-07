@@ -1,7 +1,7 @@
 """Base abstract class for ORM adapters."""
 
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, Union, Type, TypeVar, List, Callable
+from typing import Optional, Dict, Any, Tuple, Union, Type, TypeVar, List, Callable
 
 # Type variable for ORM models
 ModelType = TypeVar('ModelType')
@@ -54,6 +54,10 @@ class BaseORMAdapter(ABC):
         offset: Optional[int] = None,
         select_related: Optional[List[str]] = None,
         prefetch_related: Optional[List[str]] = None,
+        search: Optional[str] = None,
+        search_fields: Optional[List[str]] = None,
+        ordering: Optional[List[str]] = None,
+        filters: Optional[Dict[str, Tuple[str, Any]]] = None,
     ) -> List[ModelType]:
         """Get list of elements from database with pagination support (synchronous).
         
@@ -62,6 +66,12 @@ class BaseORMAdapter(ABC):
             db_session: Database session factory function
             limit: Maximum number of items to return
             offset: Number of items to skip
+            select_related: FK relations to join
+            prefetch_related: Collection relations to prefetch
+            search: Search term (case-insensitive substring match)
+            search_fields: Fields to search across
+            ordering: Ordering tokens, e.g. ["-name", "created_at"]
+            filters: Mapping field -> (operator, value) for filtering
             
         Returns:
             List of model instances
@@ -77,6 +87,10 @@ class BaseORMAdapter(ABC):
         offset: Optional[int] = None,
         select_related: Optional[List[str]] = None,
         prefetch_related: Optional[List[str]] = None,
+        search: Optional[str] = None,
+        search_fields: Optional[List[str]] = None,
+        ordering: Optional[List[str]] = None,
+        filters: Optional[Dict[str, Tuple[str, Any]]] = None,
     ) -> List[ModelType]:
         """Get list of elements from database with pagination support (asynchronous).
         
@@ -85,6 +99,12 @@ class BaseORMAdapter(ABC):
             db_session: Async database session factory function
             limit: Maximum number of items to return
             offset: Number of items to skip
+            select_related: FK relations to join
+            prefetch_related: Collection relations to prefetch
+            search: Search term (case-insensitive substring match)
+            search_fields: Fields to search across
+            ordering: Ordering tokens, e.g. ["-name", "created_at"]
+            filters: Mapping field -> (operator, value) for filtering
             
         Returns:
             List of model instances

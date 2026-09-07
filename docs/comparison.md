@@ -8,7 +8,7 @@
 
 | Approach | Developer experience | ORM support | Permissions | Filtering |
 | --- | --- | --- | --- | --- |
-| **fastapi-viewsets** | One `BaseViewset` registers CRUD routes | SQLAlchemy sync/async, Tortoise, Peewee via adapters | OAuth2 per logical method via `register` | `limit`/`offset` today; `search` and advanced filters on Roadmap |
+| **fastapi-viewsets** | One `BaseViewset` registers CRUD routes | SQLAlchemy sync/async, Tortoise, Peewee via adapters | OAuth2 per logical method via `register` | `limit`/`offset`, `search`, `ordering` and operator filters via `ListConfig` |
 | fastapi-crudrouter | CRUD-focused generators, less ViewSet-shaped | SQLAlchemy, Tortoise, Ormar, Gino, databases | Custom middleware/deps | Often extended manually |
 | Hand-rolled FastAPI | Full control, most boilerplate | Any ORM you integrate | Fully custom | Fully custom |
 
@@ -24,7 +24,7 @@
 
 **Consider alternatives if you:**
 
-- Need complex filtering, ordering, or search out of the box (these are on the [roadmap](#roadmap) but not yet built)
+- Need filtering beyond whitelisted exact/comparison operators (date ranges, null checks are on the [roadmap](#roadmap))
 - Use an ORM without an adapter (e.g. SQLModel, Beanie) — though you can write a custom `BaseORMAdapter`
 - Need a full permissions framework with role-based access control
 
@@ -60,7 +60,8 @@ Each adapter implements the same `BaseORMAdapter` interface, so viewset code sta
 
 | Item | Target | Status |
 | --- | --- | --- |
-| Wire `search` on LIST to real database queries | v1.4 | Planned |
-| Transaction helpers (`begin` / `atomic`) across adapters | v1.4 | Planned |
-| Declarative ordering (`order_by`) on LIST endpoints | v1.4 | Planned |
-| Advanced filters (`__gt`, `__lt`, `__in`) via query params | v1.5 | Planned |
+| Server-side `search` on LIST | v1.5.0 | Released |
+| Declarative ordering on LIST | v1.5.0 | Released |
+| Advanced filters (`__gt`, `__lt`, `__in`, ...) via query params | v1.5.0 | Released |
+| Transaction helpers (`begin` / `atomic`) across adapters | future | Planned |
+| Date-range filters (`__range`) and null checks (`__isnull`) | future | Planned |
