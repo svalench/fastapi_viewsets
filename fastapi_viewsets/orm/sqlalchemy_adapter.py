@@ -1,13 +1,13 @@
 """SQLAlchemy ORM adapter implementation."""
 
-from typing import Optional, Dict, Any, Union, Type, TypeVar, List, Callable
+from typing import Optional, Dict, Any, Tuple, Union, Type, TypeVar, List, Callable
 from fastapi import HTTPException
 from starlette import status
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.declarative import DeclarativeMeta
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.orm import joinedload, selectinload
 
 from fastapi_viewsets._compat import to_async_database_url
@@ -120,6 +120,61 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         """Get SQLAlchemy declarative base."""
         return self.Base
     
+    def _apply_list_clauses(
+        self,
+        model: Type[ModelType],
+        stmt: Any,
+        search: Optional[str] = None,
+        search_fields: Optional[List[str]] = None,
+        ordering: Optional[List[str]] = None,
+        filters: Optional[Dict[str, Tuple[str, Any]]] = None,
+    ) -> Any:
+        """Apply search, ordering and filters to a query or statement.
+
+        Works with both legacy ``Query`` (sync) and 2.0-style ``Select``
+        (async) because both support ``.filter()`` and ``.order_by()``.
+        """
+        if search and search_fields:
+            term = f"%{search.strip()}%"
+            clauses = [
+                getattr(model, field_name).ilike(term)
+                for field_name in search_fields
+            ]
+            if clauses:
+                stmt = stmt.filter(or_(*clauses))
+
+        if filters:
+            for field_name, (op, value) in filters.items():
+                column = getattr(model, field_name)
+                if op == "eq":
+                    stmt = stmt.filter(column == value)
+                elif op == "ne":
+                    stmt = stmt.filter(column != value)
+                elif op == "gt":
+                    stmt = stmt.filter(column > value)
+                elif op == "gte":
+                    stmt = stmt.filter(column >= value)
+                elif op == "lt":
+                    stmt = stmt.filter(column < value)
+                elif op == "lte":
+                    stmt = stmt.filter(column <= value)
+                elif op == "contains":
+                    stmt = stmt.filter(column.ilike(f"%{value}%"))
+                elif op == "in":
+                    stmt = stmt.filter(column.in_(value))
+
+        if ordering:
+            order_tokens = []
+            for token in ordering:
+                if token.startswith("-"):
+                    order_tokens.append(getattr(model, token[1:]).desc())
+                else:
+                    order_tokens.append(getattr(model, token).asc())
+            if order_tokens:
+                stmt = stmt.order_by(*order_tokens)
+
+        return stmt
+
     def get_list_queryset(
         self,
         model: Type[ModelType],
@@ -128,6 +183,10 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         offset: Optional[int] = None,
         select_related: Optional[List[str]] = None,
         prefetch_related: Optional[List[str]] = None,
+        search: Optional[str] = None,
+        search_fields: Optional[List[str]] = None,
+        ordering: Optional[List[str]] = None,
+        filters: Optional[Dict[str, Tuple[str, Any]]] = None,
     ) -> List[ModelType]:
         """Get list of elements from database with pagination support (synchronous)."""
         db = db_session()
@@ -142,6 +201,9 @@ class SQLAlchemyAdapter(BaseORMAdapter):
             if prefetch_related:
                 for rel_name in prefetch_related:
                     queryset = queryset.options(selectinload(getattr(model, rel_name)))
+            queryset = self._apply_list_clauses(
+                model, queryset, search, search_fields, ordering, filters
+            )
             if limit is not None and limit > 0:
                 queryset = queryset.limit(limit)
             if offset:
@@ -158,6 +220,10 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         offset: Optional[int] = None,
         select_related: Optional[List[str]] = None,
         prefetch_related: Optional[List[str]] = None,
+        search: Optional[str] = None,
+        search_fields: Optional[List[str]] = None,
+        ordering: Optional[List[str]] = None,
+        filters: Optional[Dict[str, Tuple[str, Any]]] = None,
     ) -> List[ModelType]:
         """Get list of elements from database with pagination support (asynchronous)."""
         db = db_session()
@@ -172,6 +238,9 @@ class SQLAlchemyAdapter(BaseORMAdapter):
             if prefetch_related:
                 for rel_name in prefetch_related:
                     stmt = stmt.options(selectinload(getattr(model, rel_name)))
+            stmt = self._apply_list_clauses(
+                model, stmt, search, search_fields, ordering, filters
+            )
             if limit is not None and limit > 0:
                 stmt = stmt.limit(limit)
             if offset:

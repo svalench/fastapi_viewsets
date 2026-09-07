@@ -1,4 +1,4 @@
-# Pagination, Filtering & Ordering
+# Pagination, Search, Ordering & Filtering
 
 ## Pagination
 
@@ -12,27 +12,90 @@ GET /items?limit=10&offset=20
 | --- | --- | --- | --- |
 | `limit` | `Optional[int]` | `10` | Maximum number of items to return |
 | `offset` | `Optional[int]` | `0` | Number of items to skip |
-| `search` | `Optional[str]` | `None` | Search query (reserved — see below) |
-
-Example:
-
-```text
-# Default: GET /items → 10 items, offset 0
-GET /items
-
-# Custom page: GET /items?limit=50&offset=100 → items 101-150
-GET /items?limit=50&offset=100
-```
 
 No additional configuration needed — pagination is built into the default `list()` handler.
 
-## Filtering
+## Search, ordering and filters via `ListConfig`
 
-!!! warning "`search` is reserved but not yet wired"
+Since v1.5.0 the LIST endpoint supports server-side search, declarative
+ordering and whitelisted filters. Declare an inner `ListConfig` class on
+your Pydantic response schema:
 
-    The `search` parameter is accepted by `list()` but ORM adapters currently ignore it. Server-side search is on the [Roadmap](#roadmap) for v1.4.
+```python
+from pydantic import BaseModel
 
-Until then, subclass `BaseViewset` or `AsyncBaseViewset` and override `list()` with your own filtering logic:
+class ItemSchema(BaseModel):
+    id: int
+    name: str
+    status: str
+    price: float
+
+    class ListConfig:
+        search_fields = ["name"]          # ?search=foo → case-insensitive substring
+        ordering_fields = ["name", "price", "id"]  # ?ordering= allowed fields
+        ordering = ["-id"]                # default ordering (newest first)
+        filters = ["status", "price"]      # ?<field>=... allowed fields
+```
+
+That is all — the default `list()` handler picks the configuration up
+automatically.
+
+### Search
+
+`GET /items?search=foo` performs a case-insensitive substring match,
+OR-ed across every field in `search_fields`.
+
+### Ordering
+
+`GET /items?ordering=-price,name` orders by `price` descending, then
+`name` ascending. A leading `-` means descending.
+
+* The field must be listed in `ordering_fields`, otherwise the endpoint
+  returns `400 Bad Request`.
+* When the `ordering` parameter is omitted, the declarative default
+  (`ListConfig.ordering`) applies.
+* When `ordering_fields` is not declared, ordering via the query
+  parameter is disabled (the parameter is ignored).
+
+### Filters
+
+Any field listed in `filters` can be filtered with an exact-match query
+parameter, and supports operator suffixes:
+
+| Example | Meaning |
+| --- | --- |
+| `?status=active` | `status == "active"` |
+| `?status__ne=active` | `status != "active"` |
+| `?price__gt=100` | `price > 100` |
+| `?price__gte=100` | `price >= 100` |
+| `?price__lt=100` | `price < 100` |
+| `?price__lte=100` | `price <= 100` |
+| `?name__contains=pro` | case-insensitive substring |
+| `?status__in=active,pending` | `status IN (...)` |
+
+* Fields not listed in `filters` are ignored — arbitrary fields never
+  reach the ORM.
+* Values are automatically coerced to `int` / `float` / `bool` when
+  they parse.
+* Everything composes: `?search=pro&status=active&ordering=-price&limit=5`.
+
+All built-in adapters (SQLAlchemy sync/async, Tortoise ORM, Peewee)
+implement search, ordering and filters. The utility layer
+(`fastapi_viewsets.utils.get_list_queryset` /
+`fastapi_viewsets.async_utils.get_list_queryset`) also accepts
+`search`, `search_fields`, `ordering` and `filters` keyword arguments
+for programmatic use.
+
+### Backward compatibility
+
+Without a `ListConfig` on the response schema, the LIST endpoint
+behaves exactly as before: `?search=` is ignored (no fields to search),
+`?ordering=` is ignored, and unknown query parameters are dropped.
+
+## Custom filtering beyond the whitelist
+
+For anything the declarative config does not cover, subclass
+`BaseViewset` or `AsyncBaseViewset` and override `list()`:
 
 ```python
 from typing import List, Optional
@@ -51,7 +114,7 @@ class ItemsWithSearch(AsyncBaseViewset):
         search: Optional[str] = None,
         token: Optional[str] = Depends(lambda: None),
     ) -> list:
-        """Custom LIST with case-insensitive search."""
+        """Custom LIST with search beyond the whitelist."""
         session = self.db_session()
         try:
             stmt = select(self.model)
@@ -66,39 +129,15 @@ class ItemsWithSearch(AsyncBaseViewset):
 
 See [Overriding Handlers](overrides.md) for the full example with search + ordering + conflict handling.
 
-## Ordering
-
-There is no built-in `order_by` helper yet. Override `list()` with an ordered query:
-
-```python
-from sqlalchemy import select
-
-
-class OrderedItems(AsyncBaseViewset):
-    async def list(
-        self,
-        limit: int = 10,
-        offset: int = 0,
-        token: Optional[str] = Depends(lambda: None),
-    ):
-        session = self.db_session()
-        try:
-            stmt = select(self.model).order_by(self.model.created_at.desc())
-            stmt = stmt.offset(offset).limit(limit)
-            rows = (await session.execute(stmt)).scalars().all()
-            return [self.response_model.model_validate(row) for row in rows]
-        finally:
-            await session.close()
-```
-
 ## Roadmap
 
 | Item | Target | Status |
 | --- | --- | --- |
-| Wire `search` on LIST to real database queries | v1.4 | Planned |
-| Declarative ordering (`order_by`) on LIST endpoints | v1.4 | Planned |
-| Advanced filters (`__gt`, `__lt`, `__in`) via query params | v1.5 | Planned |
-| Transaction helpers (`begin` / `atomic`) across adapters | v1.4 | Planned |
+| Server-side `search` on LIST | v1.5.0 | Released |
+| Declarative ordering on LIST | v1.5.0 | Released |
+| Advanced filters (`__gt`, `__lt`, `__in`, ...) via query params | v1.5.0 | Released |
+| Date-range filters (`__range`) and null checks (`__isnull`) | future | Planned |
+| Transaction helpers (`begin` / `atomic`) across adapters | future | Planned |
 
 ## Next steps
 

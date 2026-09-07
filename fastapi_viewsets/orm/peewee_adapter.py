@@ -1,6 +1,6 @@
 """Peewee ORM adapter implementation."""
 
-from typing import Optional, Dict, Any, Union, Type, TypeVar, List, Callable, TYPE_CHECKING
+from typing import Optional, Dict, Any, Tuple, Union, Type, TypeVar, List, Callable, TYPE_CHECKING
 from fastapi import HTTPException
 from starlette import status
 
@@ -104,6 +104,10 @@ class PeeweeAdapter(BaseORMAdapter):
         offset: Optional[int] = None,
         select_related: Optional[List[str]] = None,
         prefetch_related: Optional[List[str]] = None,
+        search: Optional[str] = None,
+        search_fields: Optional[List[str]] = None,
+        ordering: Optional[List[str]] = None,
+        filters: Optional[Dict[str, Tuple[str, Any]]] = None,
     ) -> List[ModelType]:
         """Get list of elements from database with pagination support (synchronous)."""
         if limit == 0:
@@ -114,6 +118,48 @@ class PeeweeAdapter(BaseORMAdapter):
             for rel_name in select_related:
                 related_model = getattr(model, rel_name).rel_model
                 queryset = queryset.join(related_model)
+        if search and search_fields:
+            from peewee import Expression, OP, fn
+            term = search.strip()
+            clauses = [
+                fn.LOWER(getattr(model, field_name)).contains(term.lower())
+                for field_name in search_fields
+            ]
+            if clauses:
+                combined = clauses[0]
+                for clause in clauses[1:]:
+                    combined = combined | clause
+                queryset = queryset.where(combined)
+        if filters:
+            for field_name, (op, value) in filters.items():
+                column = getattr(model, field_name)
+                if op == "eq":
+                    queryset = queryset.where(column == value)
+                elif op == "ne":
+                    queryset = queryset.where(column != value)
+                elif op == "gt":
+                    queryset = queryset.where(column > value)
+                elif op == "gte":
+                    queryset = queryset.where(column >= value)
+                elif op == "lt":
+                    queryset = queryset.where(column < value)
+                elif op == "lte":
+                    queryset = queryset.where(column <= value)
+                elif op == "contains":
+                    queryset = queryset.where(
+                        fn.LOWER(column).contains(str(value).lower())
+                    )
+                elif op == "in":
+                    queryset = queryset.where(column << value)
+        if ordering:
+            order_tokens = []
+            for token in ordering:
+                if token.startswith("-"):
+                    order_tokens.append(getattr(model, token[1:]).desc())
+                else:
+                    order_tokens.append(getattr(model, token).asc())
+            if order_tokens:
+                queryset = queryset.order_by(*order_tokens)
         if offset:
             queryset = queryset.offset(offset)
         if limit is not None and limit > 0:

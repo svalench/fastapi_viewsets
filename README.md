@@ -21,7 +21,7 @@ Django REST Framework-style ViewSets for FastAPI — auto-generate CRUD endpoint
 - **ORM-agnostic core** — pluggable adapters for SQLAlchemy (sync/async), Tortoise ORM, and Peewee (`ORM_TYPE` / optional extras).
 - **Typed, Pydantic-first responses** with OpenAPI tags and schemas generated from your `response_model`.
 - **Declarative eager loading** (`select_related` / `prefetch_related`) via an inner `RelatedConfig` class on Pydantic schemas — eliminates N+1 without touching the viewset.
-- **Built-in list pagination** (`limit` / `offset`), optional OAuth2 on selected operations, and room to grow for search and richer filters (see Roadmap).
+- **Built-in list pagination** (`limit` / `offset`), **server-side search**, **declarative ordering** and **advanced filters** (`eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `contains`, `in`) driven by an inner `ListConfig` class on Pydantic schemas, plus optional OAuth2 on selected operations.
 
 ## Feature matrix
 
@@ -31,8 +31,8 @@ Django REST Framework-style ViewSets for FastAPI — auto-generate CRUD endpoint
 | `limit` / `offset` on LIST | Supported | Supported | Supported | Supported |
 | OAuth2 on selected methods (`register`) | Supported | Supported | Supported | Supported |
 | Declarative eager loading (`select_related` / `prefetch_related`) | Supported | Supported | Supported (`prefetch_related`) | Supported (`select_related`) |
-| `search` query on LIST (server-side) | **Roadmap** | **Roadmap** | **Roadmap** | **Roadmap** |
-| Declarative ordering / advanced filters | **Roadmap** | **Roadmap** | **Roadmap** | **Roadmap** |
+| `search` query on LIST (server-side) | Supported | Supported | Supported | Supported |
+| Declarative ordering / advanced filters | Supported | Supported | Supported | Supported |
 
 ## Installation
 
@@ -625,25 +625,24 @@ def pagination_hint() -> str:
     return "limit and offset are parsed by `BaseViewset.list`"
 ```
 
-**Filtering** — `list` accepts `search`, but ORM adapters ignore it today; server-side search is on the Roadmap. Subclass `BaseViewset` and override `list()` with your own query until then.
+**Search, ordering and filters** — declare a `ListConfig` inner class on the response schema and the LIST endpoint gains `?search=`, `?ordering=` and whitelisted `?<field>` / `?<field>__<op>` query parameters, applied server-side by every ORM adapter:
 
 ```python
-from fastapi_viewsets import BaseViewset
+from pydantic import BaseModel
 
-def filtering_hint() -> str:
-    """Explain that `search` is reserved; override `list` for real filters today."""
-    return "search parameter is not yet applied in adapters"
+class ItemSchema(BaseModel):
+    id: int
+    name: str
+    status: str
+
+    class ListConfig:
+        search_fields = ["name"]
+        ordering_fields = ["name", "id"]
+        ordering = ["-id"]
+        filters = ["status"]
 ```
 
-**Ordering** — there is no shared `order_by` helper yet; override `list()` with an ordered query or wait for the Roadmap.
-
-```python
-from fastapi_viewsets import BaseViewset
-
-def ordering_hint() -> str:
-    """Note the absence of a built-in ordering helper on LIST endpoints."""
-    return "override list or wait for roadmap ordering helpers"
-```
+`GET /items?search=foo&ordering=name&status=active` then works out of the box. Operators: `ne`, `gt`, `gte`, `lt`, `lte`, `contains`, `in` (e.g. `?status__in=active,pending`). Fields outside the whitelist are ignored; ordering by an unknown field returns `400`. Without a `ListConfig`, LIST behaves exactly as before.
 
 ## Permissions and custom routes
 
@@ -700,16 +699,17 @@ Details: [RELEASE_NOTES.md](RELEASE_NOTES.md), [RELEASE_1.2.0.md](RELEASE_1.2.0.
 
 | Item | Target | Status |
 | --- | --- | --- |
-| Wire `search` on LIST to real database queries | v1.4 | Planned |
-| Transaction helpers (`begin` / `atomic`) across adapters | v1.4 | Planned |
-| Declarative ordering (`order_by`) on LIST endpoints | v1.4 | Planned |
-| Advanced filters (`__gt`, `__lt`, `__in`) via query params | v1.5 | Planned |
+| Transaction helpers (`begin` / `atomic`) across adapters | future | Planned |
+| Range filters on dates (`date__range`) and null checks (`field__isnull`) | future | Planned |
+| Cross-relation search (searching through `select_related` fields) | future | Planned |
+
+Released: server-side `search` (v1.5.0), declarative ordering and advanced filters (v1.5.0).
 
 ## Comparison with alternatives
 
 | Approach | Developer experience | ORM support | Permissions | Filtering |
 | --- | --- | --- | --- | --- |
-| fastapi-viewsets | One `BaseViewset` registers CRUD routes | SQLAlchemy sync/async, Tortoise, Peewee via adapters | OAuth2 per logical method via `register` | `limit`/`offset` today; `search` and advanced filters on Roadmap |
+| fastapi-viewsets | One `BaseViewset` registers CRUD routes | SQLAlchemy sync/async, Tortoise, Peewee via adapters | OAuth2 per logical method via `register` | `limit`/`offset`, `search`, `ordering` and operator filters via `ListConfig` |
 | fastapi-crudrouter | CRUD-focused generators, less ViewSet-shaped | Primarily SQLAlchemy | Custom middleware/deps | Often extended manually |
 | Hand-rolled FastAPI | Full control, most boilerplate | Any ORM you integrate | Fully custom | Fully custom |
 
