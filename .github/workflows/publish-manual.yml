@@ -23,10 +23,23 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Update version in setup.py
-      if: inputs.version != ''
+    - name: Verify requested version matches pyproject.toml
+      env:
+        REQUESTED_VERSION: ${{ inputs.version }}
       run: |
-        sed -i "s/version='[^']*'/version='${{ inputs.version }}'/" setup.py
+        python - <<'PY'
+        import os
+        import tomllib
+        from pathlib import Path
+
+        requested = os.environ["REQUESTED_VERSION"].removeprefix("v")
+        actual = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
+        if requested != actual:
+            raise SystemExit(
+                f"Requested version {requested!r} does not match pyproject.toml ({actual}). "
+                "Update pyproject.toml before publishing."
+            )
+        PY
 
     - name: Install build dependencies
       run: |
@@ -47,4 +60,3 @@ jobs:
         TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
       run: |
         twine upload dist/*
-

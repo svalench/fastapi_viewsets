@@ -40,7 +40,10 @@ Django REST Framework-style ViewSets for FastAPI — auto-generate CRUD endpoint
 pip install fastapi-viewsets
 ```
 
-Optional extras (see `setup.py`):
+SQLAlchemy 2.0 or newer is installed automatically. For a local SQLite app,
+start with the [sync quickstart](#quickstart-sqlalchemy-sync); no separate database driver is needed.
+
+Optional extras (see `pyproject.toml`):
 
 ```bash
 pip install "fastapi-viewsets[sqlalchemy]"
@@ -377,6 +380,9 @@ an async-capable URL and use the lazy helpers from `db_conf`. The
 package auto-converts `sqlite://` to `sqlite+aiosqlite://`,
 `postgresql://` to `postgresql+asyncpg://`, etc.
 
+Save the following as `main.py` in an empty folder, then run
+`uvicorn main:app --reload`. Open `http://127.0.0.1:8000/docs` to try the API.
+
 ```python
 from contextlib import asynccontextmanager
 
@@ -691,9 +697,9 @@ class ItemsWithStats(BaseViewset):
 - Internal `register()` deduplicated between sync and async viewsets via a shared mixin.
 - PEP 621 `pyproject.toml`, `python_requires>=3.9`, FastAPI `>=0.110`, ruff/black/mypy preconfigured.
 
-Previous release: [v1.1.0](RELEASE_1.1.0.md) introduced multi-ORM support via adapters (SQLAlchemy default, optional Tortoise and Peewee), `ORMFactory` and environment-driven `ORM_TYPE` configuration.
+Previous release: [v1.1.0](https://github.com/svalench/fastapi_viewsets/blob/master/RELEASE_1.1.0.md) introduced multi-ORM support via adapters (SQLAlchemy default, optional Tortoise and Peewee), `ORMFactory` and environment-driven `ORM_TYPE` configuration.
 
-Details: [RELEASE_NOTES.md](RELEASE_NOTES.md), [RELEASE_1.2.0.md](RELEASE_1.2.0.md), [RELEASE_1.1.0.md](RELEASE_1.1.0.md).
+Details: [RELEASE_NOTES.md](https://github.com/svalench/fastapi_viewsets/blob/master/RELEASE_NOTES.md), [RELEASE_1.2.0.md](https://github.com/svalench/fastapi_viewsets/blob/master/RELEASE_1.2.0.md), [RELEASE_1.1.0.md](https://github.com/svalench/fastapi_viewsets/blob/master/RELEASE_1.1.0.md).
 
 ## Roadmap (planned)
 
@@ -718,6 +724,7 @@ Released: server-side `search` (v1.5.0), declarative ordering and advanced filte
 From the repository root (see `pytest.ini`):
 
 ```bash
+python -m pip install -e ".[test]"
 pytest
 ```
 
@@ -729,7 +736,7 @@ See [open issues](https://github.com/svalench/fastapi_viewsets/issues) to propos
 
 ## License
 
-Distributed under the MIT License. See [LICENSE](LICENSE).
+Distributed under the MIT License. See [LICENSE](https://github.com/svalench/fastapi_viewsets/blob/master/LICENSE).
 
 ## Author
 

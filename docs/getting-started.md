@@ -7,7 +7,7 @@
 | Python | >= 3.9 |
 | FastAPI | >= 0.110 |
 | Pydantic | >= 2.5, < 3 |
-| SQLAlchemy | >= 1.4.36 |
+| SQLAlchemy | >= 2.0.0 |
 | python-dotenv | >= 0.19 |
 
 ## Install from PyPI

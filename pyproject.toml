@@ -28,13 +28,13 @@ classifiers = [
 dependencies = [
     "fastapi>=0.110.0",
     "uvicorn>=0.17.6",
-    "SQLAlchemy>=1.4.36",
+    "SQLAlchemy>=2.0.0",
     "pydantic>=2.5,<3",
     "python-dotenv>=0.19.0",
 ]
 
 [project.optional-dependencies]
-sqlalchemy = ["SQLAlchemy>=1.4.36"]
+sqlalchemy = ["SQLAlchemy>=2.0.0"]
 tortoise = ["tortoise-orm>=0.20.0,<1.0", "asyncpg>=0.28.0"]
 peewee = ["peewee>=3.17.0,<4"]
 test = [
