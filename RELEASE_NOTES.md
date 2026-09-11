@@ -1,5 +1,15 @@
 # Release Notes
 
+## Version 1.5.1
+
+Maintenance release fixing dependency metadata, source-distribution contents,
+quickstart validation, and release-version checks.
+
+SQLAlchemy 2.0 or newer is required, matching the APIs already used by the
+library; SQLAlchemy 1.4 is not supported.
+
+Details: [RELEASE_1.5.1.md](RELEASE_1.5.1.md).
+
 ## Version 1.5.0
 
 ### ✨ Search, Ordering & Filters
@@ -346,4 +356,3 @@ app.include_router(user_viewset)
 - [GitHub Repository](https://github.com/svalench/fastapi_viewsets)
 - [PyPI Package](https://pypi.org/project/fastapi-viewsets/)
 - [Documentation](https://github.com/svalench/fastapi_viewsets#readme)
-
