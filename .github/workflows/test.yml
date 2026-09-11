@@ -31,7 +31,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/setup.py') }}
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
         restore-keys: |
           ${{ runner.os }}-pip-
 
@@ -83,3 +83,34 @@ jobs:
       run: |
         pytest tests/ -v --cov=fastapi_viewsets --cov-report=term-missing --cov-fail-under=70
 
+  package:
+    name: Build and test installed wheel
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Build sdist and wheel
+      run: |
+        python -m pip install build twine
+        python -m build
+        python -m twine check --strict dist/*
+
+    - name: Install wheel with the minimum SQLAlchemy version
+      run: |
+        python -m venv .venv
+        .venv/bin/python -m pip install dist/*.whl pytest pytest-asyncio httpx "SQLAlchemy==2.0.0"
+        .venv/bin/python -m pip check
+        .venv/bin/python -I -c "from fastapi_viewsets import BaseViewset, AsyncBaseViewset"
+
+    - name: Exercise sync quickstarts without an async driver
+      run: |
+        .venv/bin/python -m pytest --noconftest -o addopts= tests/test_quickstarts.py -k "not async"
+
+    - name: Exercise all quickstarts with SQLite async support
+      run: |
+        .venv/bin/python -m pip install aiosqlite
+        .venv/bin/python -m pytest --noconftest -o addopts= tests/test_quickstarts.py
