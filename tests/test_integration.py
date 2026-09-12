@@ -308,7 +308,7 @@ class TestErrorHandling:
         
         # Try to create duplicate
         response2 = client.post('/users', json=user_data)
-        assert response2.status_code == 400
+        assert response2.status_code == 409
         assert "integrity" in response2.json()['detail'].lower()
 
 

@@ -10,8 +10,8 @@ GET /items?limit=10&offset=20
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `limit` | `Optional[int]` | `10` | Maximum number of items to return |
-| `offset` | `Optional[int]` | `0` | Number of items to skip |
+| `limit` | `int` | `10` | Maximum number of items to return (must be `0..10000`, negative values are rejected with `422`) |
+| `offset` | `int` | `0` | Number of items to skip (negative values are rejected with `422`) |
 
 No additional configuration needed — pagination is built into the default `list()` handler.
 

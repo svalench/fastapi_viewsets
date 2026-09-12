@@ -119,22 +119,20 @@ class TestEdgeCasesSync:
         assert result.email == sample_user_data["email"]
 
     def test_update_element_put_with_missing_fields(self, test_model, db_session_factory, sample_user_data):
-        """Test PUT update with missing required fields (should raise error)."""
+        """PUT updates only the provided fields and never nulls the rest."""
         # Create element
         created = create_element(test_model, db_session_factory, sample_user_data)
-        
-        # Update with PUT but missing required fields (email is required)
+
+        # Update with PUT but missing fields — they must stay intact
         update_data = {
             "username": "updated"
-            # Missing email, is_active, age
+            # email, is_active, age not provided
         }
-        
-        # PUT with missing required fields should raise IntegrityError
-        with pytest.raises(HTTPException) as exc_info:
-            update_element(test_model, db_session_factory, created.id, update_data, partial=False)
-        
-        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
-        assert "integrity" in exc_info.value.detail.lower() or "NOT NULL" in exc_info.value.detail
+
+        result = update_element(test_model, db_session_factory, created.id, update_data, partial=False)
+
+        assert result.username == "updated"
+        assert result.email == sample_user_data["email"]  # preserved, not nulled
 
     def test_delete_element_with_zero_id(self, test_model, db_session_factory):
         """Test deleting element with ID=0."""
@@ -266,7 +264,7 @@ class TestDatabaseErrorHandling:
         with pytest.raises(HTTPException) as exc_info:
             create_element(test_model, db_session_factory, sample_user_data)
         
-        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert exc_info.value.status_code == status.HTTP_409_CONFLICT
         assert "integrity" in exc_info.value.detail.lower()
 
     def test_update_to_duplicate_unique_field(self, test_model, db_session_factory, sample_users_data):
@@ -281,6 +279,6 @@ class TestDatabaseErrorHandling:
         with pytest.raises(HTTPException) as exc_info:
             update_element(test_model, db_session_factory, user2.id, update_data, partial=True)
         
-        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert exc_info.value.status_code == status.HTTP_409_CONFLICT
         assert "integrity" in exc_info.value.detail.lower()
 

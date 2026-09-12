@@ -40,17 +40,20 @@ Django REST Framework-style ViewSets for FastAPI — auto-generate CRUD endpoint
 pip install fastapi-viewsets
 ```
 
-SQLAlchemy 2.0 or newer is installed automatically. For a local SQLite app,
-start with the [sync quickstart](#quickstart-sqlalchemy-sync); no separate database driver is needed.
-
-Optional extras (see `pyproject.toml`):
+The base install is ORM-agnostic: it pulls in only FastAPI, Pydantic and
+python-dotenv. Pick your ORM via an extra (see `pyproject.toml`):
 
 ```bash
-pip install "fastapi-viewsets[sqlalchemy]"
+pip install "fastapi-viewsets[sqlalchemy]"   # SQLAlchemy 2.x, incl. asyncio support (greenlet)
 pip install "fastapi-viewsets[tortoise]"
 pip install "fastapi-viewsets[peewee]"
 pip install "fastapi-viewsets[test]"   # pytest, httpx, coverage, etc.
 ```
+
+For a local SQLite app, start with the
+[sync quickstart](#quickstart-sqlalchemy-sync); no separate database driver is needed.
+To execute the quickstart's `python main.py` (or serve any app) you also
+need an ASGI server, e.g. `pip install uvicorn`.
 
 For async SQLAlchemy you still need a driver such as `aiosqlite`, `asyncpg`, or `aiomysql` alongside your database URL.
 
@@ -443,10 +446,23 @@ Notes:
   `model_config = ConfigDict(from_attributes=True)` instead of the v1
   `class Config: orm_mode = True`.
 - `PATCH` uses `model_dump(exclude_unset=True)` internally, so unset
-  fields are no longer overwritten with defaults.
+  fields are no longer overwritten with defaults. Since v1.5.2 the PATCH
+  body is validated against an auto-generated all-optional variant of
+  your `response_model`, so partial bodies pass validation even when the
+  schema has required fields, and an explicit JSON `null` clears a
+  nullable column.
+- `PUT` replaces exactly the fields present in the payload; model
+  columns that are not part of the `response_model` are left untouched.
+- `POST` never sends an explicit `NULL` primary key to the database —
+  `id: Optional[int] = None` in the schema is safe on every adapter.
+- Integrity violations (e.g. duplicate unique values) return
+  `409 Conflict` with a sanitized message; raw SQL and driver internals
+  are never exposed in the response body.
 - If the async driver (`aiosqlite` / `asyncpg` / `aiomysql`) is not
   installed, sync usage still works — only `get_async_session()` raises
-  a helpful `RuntimeError`.
+  a helpful `RuntimeError`. The `sqlalchemy` extra installs
+  `SQLAlchemy[asyncio]`, which already includes `greenlet` for async
+  sessions.
 
 ## Overriding `list` and `create_element` (custom LIST and POST)
 
@@ -454,8 +470,11 @@ Every CRUD handler is a regular method, so subclassing the viewset is
 the canonical way to add filtering, ordering, validation, conflict
 handling, and so on. The example below subclasses `AsyncBaseViewset`
 and overrides both `list` (case-insensitive search + simple ordering)
-and `create_element` (input normalization + map `IntegrityError` to
-409).
+and `create_element` (input normalization + custom conflict message).
+
+> Since v1.5.2 the adapters themselves map `IntegrityError` to
+> `409 Conflict`; override `create_element` only when you need a custom
+> error payload or extra normalization.
 
 ```python
 from typing import List, Optional
@@ -621,7 +640,7 @@ app.include_router(router)
 
 ## Pagination, filtering, ordering
 
-**Pagination** — `BaseViewset.list` maps `limit` and `offset` to query parameters on the LIST route.
+**Pagination** — `BaseViewset.list` maps `limit` and `offset` to query parameters on the LIST route. Defaults are `limit=10`, `offset=0`; negative values are rejected with `422`, and `limit` is capped at `10000`.
 
 ```python
 from fastapi_viewsets import BaseViewset
@@ -681,6 +700,34 @@ class ItemsWithStats(BaseViewset):
 ```
 
 ## What is new
+
+### v1.5.2
+
+Bugfix release for the CRUD write paths (see
+[RELEASE_1.5.2.md](https://github.com/svalench/fastapi_viewsets/blob/master/RELEASE_1.5.2.md)):
+
+- **Multi-viewset apps fixed**: `register()` no longer leaks one viewset's
+  body schema into other viewsets — every `POST`/`PUT`/`PATCH` endpoint
+  now validates against its own `response_model`.
+- **PATCH is truly partial**: the PATCH body is validated against an
+  auto-generated all-optional variant of the response schema, and an
+  explicit JSON `null` clears a nullable column.
+- **PUT no longer nulls columns** that are absent from the Pydantic
+  schema.
+- **Integrity violations return `409 Conflict`** with a sanitized message
+  instead of `400` with raw SQL/driver internals.
+- **Create never passes an explicit `NULL` primary key** — fixes Tortoise
+  `POST` and PostgreSQL inserts with `id: Optional[int] = None` schemas.
+- **Pagination validated**: negative `limit`/`offset` rejected with `422`.
+- **Filters advertised in OpenAPI**: whitelisted `ListConfig.filters`
+  fields and their `__op` variants show up in Swagger UI.
+- **Leaner dependencies**: the base install no longer requires SQLAlchemy
+  or uvicorn; the `sqlalchemy` extra installs `SQLAlchemy[asyncio]`
+  (includes `greenlet`).
+
+Earlier releases: v1.5.0 (server-side `search`, declarative ordering and
+filters — [RELEASE_1.5.0.md](https://github.com/svalench/fastapi_viewsets/blob/master/RELEASE_1.5.0.md)),
+v1.4.0 ([RELEASE_1.4.0.md](https://github.com/svalench/fastapi_viewsets/blob/master/RELEASE_1.4.0.md)).
 
 ### v1.3.0
 

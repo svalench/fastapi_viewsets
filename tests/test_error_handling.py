@@ -42,7 +42,7 @@ class TestSQLAlchemyAdapterErrorHandling:
         with pytest.raises(HTTPException) as exc_info:
             adapter.create_element(TestModel, adapter.get_session, {"name": "test"})
         
-        assert exc_info.value.status_code == 400
+        assert exc_info.value.status_code == 409
         assert "Integrity error" in str(exc_info.value.detail)
         
         # Cleanup
