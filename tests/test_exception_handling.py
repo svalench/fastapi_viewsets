@@ -118,7 +118,7 @@ class TestSQLAlchemyAdapterExceptions:
                 partial=True
             )
         
-        assert exc_info.value.status_code == 400
+        assert exc_info.value.status_code == 409
         assert "Integrity error" in str(exc_info.value.detail)
         
         # Cleanup
@@ -304,7 +304,7 @@ class TestTortoiseAdapterExceptions:
                     {"name": "test1"}  # Duplicate
                 )
             
-            assert exc_info.value.status_code == 400
+            assert exc_info.value.status_code == 409
             assert "Integrity error" in str(exc_info.value.detail)
             
             # Cleanup
@@ -416,7 +416,7 @@ class TestPeeweeAdapterExceptions:
                     {"name": "test1"}  # Duplicate
                 )
             
-            assert exc_info.value.status_code == 400
+            assert exc_info.value.status_code == 409
             assert "Integrity error" in str(exc_info.value.detail)
             
             # Cleanup

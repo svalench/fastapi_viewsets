@@ -1,5 +1,15 @@
 # Release Notes
 
+## Version 1.5.2
+
+Bugfix release for the CRUD write paths: multi-viewset body-schema leak,
+true partial PATCH (incl. explicit `null`), PUT no longer nulls columns
+outside the schema, `409 Conflict` without SQL leaks on integrity
+violations, validated pagination, filters in OpenAPI, and leaner core
+dependencies.
+
+Details: [RELEASE_1.5.2.md](RELEASE_1.5.2.md).
+
 ## Version 1.5.1
 
 Maintenance release fixing dependency metadata, source-distribution contents,

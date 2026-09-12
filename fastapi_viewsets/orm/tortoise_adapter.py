@@ -218,6 +218,11 @@ class TortoiseAdapter(BaseORMAdapter):
         await self._ensure_initialized()
         
         try:
+            # Never pass a NULL primary key explicitly — Tortoise
+            # rejects ``id=None`` instead of autoincrementing.
+            pk_attr = getattr(model._meta, "pk_attr", "id")
+            data = {k: v for k, v in dict(data).items() if not (v is None and k == pk_attr)}
+
             # Validate required fields
             required_fields = set()
             for field_name, field in model._meta.fields_map.items():
@@ -236,13 +241,13 @@ class TortoiseAdapter(BaseORMAdapter):
             return instance
         except TortoiseIntegrityError as e:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Integrity error: {str(e)}"
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Integrity error: a database constraint was violated"
             )
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Error creating element: {str(e)}"
+                detail="Error creating element"
             )
     
     def create_element(
@@ -273,13 +278,10 @@ class TortoiseAdapter(BaseORMAdapter):
                 detail=f"Element with id {id} not found"
             )
         
-        if partial:
-            # PATCH: update only provided fields, skip None values
-            data = {key: value for key, value in dict(data).items() if value is not None}
-        else:
-            # PUT: replace all fields with provided values, use None for missing fields
-            all_fields = set(model._meta.fields_map.keys()) - {'id'}
-            data = {col: data.get(col, None) for col in all_fields}
+        # Only write fields explicitly present in the payload; never
+        # touch the primary key. Explicit ``null`` values are honored.
+        pk_attr = getattr(model._meta, "pk_attr", "id")
+        data = {key: value for key, value in dict(data).items() if key != pk_attr}
         
         if not data:
             return instance
@@ -322,7 +324,7 @@ class TortoiseAdapter(BaseORMAdapter):
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Error deleting element: {str(e)}"
+                detail="Error deleting element"
             )
     
     def delete_element(

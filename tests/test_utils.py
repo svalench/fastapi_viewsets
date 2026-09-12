@@ -169,7 +169,7 @@ class TestCreateElement:
         with pytest.raises(HTTPException) as exc_info:
             create_element(test_model, db_session_factory, sample_user_data)
         
-        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert exc_info.value.status_code == status.HTTP_409_CONFLICT
         assert "integrity" in exc_info.value.detail.lower()
 
     def test_create_element_with_none_values(self, test_model, db_session_factory):
@@ -221,21 +221,21 @@ class TestUpdateElement:
         assert result.email == sample_user_data["email"]  # unchanged
         assert result.is_active == sample_user_data["is_active"]  # unchanged
 
-    def test_update_element_patch_skip_none(self, test_model, db_session_factory, sample_user_data):
-        """Test PATCH update skips None values."""
+    def test_update_element_patch_explicit_null(self, test_model, db_session_factory, sample_user_data):
+        """PATCH writes explicitly provided null values (JSON null clears the field)."""
         # Create element
         created = create_element(test_model, db_session_factory, sample_user_data)
-        
-        # Update with PATCH including None
+
+        # Update with PATCH including an explicit None
         update_data = {
             "username": "patcheduser",
             "age": None
         }
         result = update_element(test_model, db_session_factory, created.id, update_data, partial=True)
-        
+
         assert result.username == "patcheduser"
-        # age should remain unchanged (not set to None in PATCH)
-        assert result.age == sample_user_data.get("age")
+        # explicit null clears the column
+        assert result.age is None
 
     def test_update_nonexistent_element(self, test_model, db_session_factory):
         """Test updating non-existent element raises 404."""
@@ -258,7 +258,7 @@ class TestUpdateElement:
         with pytest.raises(HTTPException) as exc_info:
             update_element(test_model, db_session_factory, user2.id, update_data, partial=True)
         
-        assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+        assert exc_info.value.status_code == status.HTTP_409_CONFLICT
         assert "integrity" in exc_info.value.detail.lower()
 
 

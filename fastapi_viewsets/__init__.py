@@ -9,9 +9,8 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union
 
-from fastapi import APIRouter, Body, Depends, Request
+from fastapi import APIRouter, Body, Depends, Query, Request
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
 from fastapi_viewsets._compat import model_to_dict
 from fastapi_viewsets._register import _RegisterMixin
@@ -82,7 +81,7 @@ class BaseViewset(_RegisterMixin, APIRouter):
         self.endpoint: Optional[str] = endpoint
         self.response_model: Optional[Type[ResponseModelType]] = response_model
         self.model: Optional[Type[ModelType]] = model
-        self.db_session: Optional[Callable[[], Session]] = db_session
+        self.db_session: Optional[Callable[[], Any]] = db_session
         self.orm_adapter: Optional[BaseORMAdapter] = orm_adapter or get_orm_adapter()
 
     # ------------------------------------------------------------------
@@ -91,8 +90,8 @@ class BaseViewset(_RegisterMixin, APIRouter):
 
     def list(
         self,
-        limit: Optional[int] = 10,
-        offset: Optional[int] = 0,
+        limit: int = Query(10, ge=0, le=10000),
+        offset: int = Query(0, ge=0),
         search: Optional[str] = None,
         ordering: Optional[str] = None,
         request: Request = None,
@@ -116,6 +115,13 @@ class BaseViewset(_RegisterMixin, APIRouter):
             parse_filters,
             parse_ordering_param,
         )
+
+        # FastAPI resolves ``Query`` defaults for HTTP calls; direct
+        # programmatic calls receive the unresolved ``Query`` object.
+        if not isinstance(limit, int):
+            limit = 10
+        if not isinstance(offset, int):
+            offset = 0
 
         config = get_list_config(self.response_model)
         return get_list_queryset(

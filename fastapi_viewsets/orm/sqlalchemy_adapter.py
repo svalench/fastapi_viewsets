@@ -316,6 +316,11 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         """Create new element in database (synchronous)."""
         db = db_session()
         try:
+            # Never pass a NULL primary key explicitly — some backends
+            # (e.g. PostgreSQL) reject it instead of autoincrementing.
+            pk_cols = {col.name for col in model.__table__.primary_key.columns}
+            data = {k: v for k, v in dict(data).items() if not (v is None and k in pk_cols)}
+
             # Validate required fields
             required_fields = {col.name for col in model.__table__.columns 
                              if not col.nullable and col.name != 'id' and not col.primary_key}
@@ -338,20 +343,20 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         except IntegrityError as e:
             db.rollback()
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Integrity error: {str(e)}"
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Integrity error: a database constraint was violated"
             )
         except SQLAlchemyError as e:
             db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Database error: {str(e)}"
+                detail="Database error"
             )
         except Exception as e:
             db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Error creating element: {str(e)}"
+                detail="Error creating element"
             )
         finally:
             db.close()
@@ -365,6 +370,11 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         """Create new element in database (asynchronous)."""
         db = db_session()
         try:
+            # Never pass a NULL primary key explicitly — some backends
+            # (e.g. PostgreSQL) reject it instead of autoincrementing.
+            pk_cols = {col.name for col in model.__table__.primary_key.columns}
+            data = {k: v for k, v in dict(data).items() if not (v is None and k in pk_cols)}
+
             # Validate required fields
             required_fields = {col.name for col in model.__table__.columns 
                              if not col.nullable and col.name != 'id' and not col.primary_key}
@@ -384,20 +394,20 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         except IntegrityError as e:
             await db.rollback()
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Integrity error: {str(e)}"
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Integrity error: a database constraint was violated"
             )
         except SQLAlchemyError as e:
             await db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Database error: {str(e)}"
+                detail="Database error"
             )
         except Exception as e:
             await db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Error creating element: {str(e)}"
+                detail="Error creating element"
             )
         finally:
             await db.close()
@@ -420,11 +430,14 @@ class SQLAlchemyAdapter(BaseORMAdapter):
                     detail=f"Element with id {id} not found"
                 )
             
-            if partial:
-                data = {key: value for key, value in dict(data).items() if value is not None}
-            else:
-                all_columns = {col.name for col in model.__table__.columns if not col.primary_key}
-                data = {col: data.get(col, None) for col in all_columns}
+            # Only write fields explicitly present in the payload and
+            # never touch the primary key. PATCH payloads arrive with
+            # ``exclude_unset`` applied upstream, so explicit ``null``
+            # values are honored (they clear the column); PUT replaces
+            # exactly the fields the schema carries and leaves columns
+            # absent from the schema untouched.
+            pk_cols = {col.name for col in model.__table__.primary_key.columns}
+            data = {key: value for key, value in dict(data).items() if key not in pk_cols}
             
             if not data:
                 db.refresh(result)
@@ -437,14 +450,14 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         except IntegrityError as e:
             db.rollback()
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Integrity error: {str(e)}"
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Integrity error: a database constraint was violated"
             )
         except SQLAlchemyError as e:
             db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Database error: {str(e)}"
+                detail="Database error"
             )
         except HTTPException:
             db.rollback()
@@ -453,7 +466,7 @@ class SQLAlchemyAdapter(BaseORMAdapter):
             db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Error updating element: {str(e)}"
+                detail="Error updating element"
             )
         finally:
             db.close()
@@ -476,11 +489,14 @@ class SQLAlchemyAdapter(BaseORMAdapter):
                     detail=f"Element with id {id} not found"
                 )
             
-            if partial:
-                data = {key: value for key, value in dict(data).items() if value is not None}
-            else:
-                all_columns = {col.name for col in model.__table__.columns if not col.primary_key}
-                data = {col: data.get(col, None) for col in all_columns}
+            # Only write fields explicitly present in the payload and
+            # never touch the primary key. PATCH payloads arrive with
+            # ``exclude_unset`` applied upstream, so explicit ``null``
+            # values are honored (they clear the column); PUT replaces
+            # exactly the fields the schema carries and leaves columns
+            # absent from the schema untouched.
+            pk_cols = {col.name for col in model.__table__.primary_key.columns}
+            data = {key: value for key, value in dict(data).items() if key not in pk_cols}
             
             if not data:
                 await db.refresh(result)
@@ -495,14 +511,14 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         except IntegrityError as e:
             await db.rollback()
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Integrity error: {str(e)}"
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Integrity error: a database constraint was violated"
             )
         except SQLAlchemyError as e:
             await db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Database error: {str(e)}"
+                detail="Database error"
             )
         except HTTPException:
             await db.rollback()
@@ -511,7 +527,7 @@ class SQLAlchemyAdapter(BaseORMAdapter):
             await db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Error updating element: {str(e)}"
+                detail="Error updating element"
             )
         finally:
             await db.close()
@@ -541,13 +557,13 @@ class SQLAlchemyAdapter(BaseORMAdapter):
             db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Database error: {str(e)}"
+                detail="Database error"
             )
         except Exception as e:
             db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Error deleting element: {str(e)}"
+                detail="Error deleting element"
             )
         finally:
             db.close()
@@ -577,13 +593,13 @@ class SQLAlchemyAdapter(BaseORMAdapter):
             await db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Database error: {str(e)}"
+                detail="Database error"
             )
         except Exception as e:
             await db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Error deleting element: {str(e)}"
+                detail="Error deleting element"
             )
         finally:
             await db.close()

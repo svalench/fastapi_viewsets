@@ -7,8 +7,8 @@
 | Python | >= 3.9 |
 | FastAPI | >= 0.110 |
 | Pydantic | >= 2.5, < 3 |
-| SQLAlchemy | >= 2.0.0 |
 | python-dotenv | >= 0.19 |
+| SQLAlchemy | >= 2.0.0 (only for the `sqlalchemy` extra / default `ORM_TYPE`) |
 
 ## Install from PyPI
 
@@ -18,8 +18,9 @@ pip install fastapi-viewsets
 
 ## Optional extras
 
-SQLAlchemy is a core dependency (installed automatically). The extras below
-add ORM-specific packages when you need Tortoise or Peewee:
+The base install is ORM-agnostic (FastAPI + Pydantic + python-dotenv only).
+Add the extra for your ORM — and an ASGI server such as `uvicorn` to run
+your app:
 
 === "SQLAlchemy"
 

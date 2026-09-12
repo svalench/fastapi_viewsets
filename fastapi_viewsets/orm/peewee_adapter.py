@@ -216,6 +216,10 @@ class PeeweeAdapter(BaseORMAdapter):
     ) -> ModelType:
         """Create new element in database (synchronous)."""
         try:
+            # Never pass a NULL primary key explicitly.
+            pk_name = getattr(model._meta.primary_key, "name", "id")
+            data = {k: v for k, v in dict(data).items() if not (v is None and k == pk_name)}
+
             # Validate required fields
             required_fields = set()
             for field_name, field in model._meta.fields.items():
@@ -234,13 +238,13 @@ class PeeweeAdapter(BaseORMAdapter):
             return instance
         except PeeweeIntegrityError as e:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Integrity error: {str(e)}"
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Integrity error: a database constraint was violated"
             )
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Error creating element: {str(e)}"
+                detail="Error creating element"
             )
     
     async def create_element_async(
@@ -269,13 +273,10 @@ class PeeweeAdapter(BaseORMAdapter):
                 detail=f"Element with id {id} not found"
             )
         
-        if partial:
-            # PATCH: update only provided fields, skip None values
-            data = {key: value for key, value in dict(data).items() if value is not None}
-        else:
-            # PUT: replace all fields with provided values, use None for missing fields
-            all_fields = set(model._meta.fields.keys()) - {'id'}
-            data = {col: data.get(col, None) for col in all_fields}
+        # Only write fields explicitly present in the payload; never
+        # touch the primary key. Explicit ``null`` values are honored.
+        pk_name = getattr(model._meta.primary_key, "name", "id")
+        data = {key: value for key, value in dict(data).items() if key != pk_name}
         
         if not data:
             return instance
@@ -316,7 +317,7 @@ class PeeweeAdapter(BaseORMAdapter):
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Error deleting element: {str(e)}"
+                detail="Error deleting element"
             )
     
     async def delete_element_async(
