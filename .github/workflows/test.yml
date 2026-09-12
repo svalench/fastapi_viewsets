@@ -81,7 +81,14 @@ jobs:
 
     - name: Run tests
       run: |
-        pytest tests/ -v --cov=fastapi_viewsets --cov-report=term-missing --cov-fail-under=70
+        pytest tests/ -v --cov=fastapi_viewsets --cov-report=xml --cov-report=term-missing --cov-fail-under=70
+
+    - name: Upload coverage to codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        flags: extras
+        fail_ci_if_error: false
 
   package:
     name: Build and test installed wheel

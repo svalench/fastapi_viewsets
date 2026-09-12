@@ -10,6 +10,7 @@ Covers:
 * M2 — negative ``limit``/``offset`` are rejected with 422.
 * M5 — whitelisted filters appear in the OpenAPI schema.
 """
+
 from typing import Optional
 
 import pytest
@@ -80,11 +81,21 @@ def _build_two_viewset_app(adapter):
     Base.metadata.create_all(adapter.engine)
 
     app = FastAPI()
-    va = BaseViewset(endpoint="/alpha", model=Alpha, response_model=_NameSchema,
-                     db_session=adapter.get_session, orm_adapter=adapter)
+    va = BaseViewset(
+        endpoint="/alpha",
+        model=Alpha,
+        response_model=_NameSchema,
+        db_session=adapter.get_session,
+        orm_adapter=adapter,
+    )
     va.register(methods=["POST", "PATCH"])
-    vb = BaseViewset(endpoint="/beta", model=Beta, response_model=_TitleSchema,
-                     db_session=adapter.get_session, orm_adapter=adapter)
+    vb = BaseViewset(
+        endpoint="/beta",
+        model=Beta,
+        response_model=_TitleSchema,
+        db_session=adapter.get_session,
+        orm_adapter=adapter,
+    )
     vb.register(methods=["POST", "PATCH"])
     app.include_router(va)
     app.include_router(vb)
@@ -115,8 +126,13 @@ def test_b2_patch_accepts_partial_body_with_required_fields(sqlalchemy_stack):
 
     model = _make_model(sqlalchemy_stack, "reg_patch_partial")
     app = FastAPI()
-    vs = BaseViewset(endpoint="/items", model=model, response_model=_NameSchema,
-                     db_session=sqlalchemy_stack.get_session, orm_adapter=sqlalchemy_stack)
+    vs = BaseViewset(
+        endpoint="/items",
+        model=model,
+        response_model=_NameSchema,
+        db_session=sqlalchemy_stack.get_session,
+        orm_adapter=sqlalchemy_stack,
+    )
     vs.register(methods=["POST", "PATCH"])
     app.include_router(vs)
     client = TestClient(app)
@@ -134,8 +150,13 @@ def test_b4_patch_explicit_null_clears_field(sqlalchemy_stack):
 
     model = _make_model(sqlalchemy_stack, "reg_patch_null")
     app = FastAPI()
-    vs = BaseViewset(endpoint="/items", model=model, response_model=_NameSchema,
-                     db_session=sqlalchemy_stack.get_session, orm_adapter=sqlalchemy_stack)
+    vs = BaseViewset(
+        endpoint="/items",
+        model=model,
+        response_model=_NameSchema,
+        db_session=sqlalchemy_stack.get_session,
+        orm_adapter=sqlalchemy_stack,
+    )
     vs.register(methods=["POST", "PATCH"])
     app.include_router(vs)
     client = TestClient(app)
@@ -154,16 +175,22 @@ def test_b3_put_preserves_columns_absent_from_schema(sqlalchemy_stack):
 
     model = _make_model(sqlalchemy_stack, "reg_put_secret", extra_column=True)
     app = FastAPI()
-    vs = BaseViewset(endpoint="/items", model=model, response_model=_NameSchema,
-                     db_session=sqlalchemy_stack.get_session, orm_adapter=sqlalchemy_stack)
+    vs = BaseViewset(
+        endpoint="/items",
+        model=model,
+        response_model=_NameSchema,
+        db_session=sqlalchemy_stack.get_session,
+        orm_adapter=sqlalchemy_stack,
+    )
     vs.register(methods=["POST", "PUT"])
     app.include_router(vs)
     client = TestClient(app)
 
     created = client.post("/items", json={"name": "keepsecret", "price": 1}).json()
     db = sqlalchemy_stack.get_session()
-    db.execute(text("UPDATE reg_put_secret SET secret='classified' WHERE id=:i"),
-               {"i": created["id"]})
+    db.execute(
+        text("UPDATE reg_put_secret SET secret='classified' WHERE id=:i"), {"i": created["id"]}
+    )
     db.commit()
     db.close()
 
@@ -171,8 +198,9 @@ def test_b3_put_preserves_columns_absent_from_schema(sqlalchemy_stack):
     assert r.status_code == 200, r.text
 
     db = sqlalchemy_stack.get_session()
-    secret = db.execute(text("SELECT secret FROM reg_put_secret WHERE id=:i"),
-                        {"i": created["id"]}).scalar()
+    secret = db.execute(
+        text("SELECT secret FROM reg_put_secret WHERE id=:i"), {"i": created["id"]}
+    ).scalar()
     db.close()
     assert secret == "classified"
 
@@ -183,8 +211,13 @@ def test_b5_create_ignores_none_primary_key(sqlalchemy_stack):
 
     model = _make_model(sqlalchemy_stack, "reg_pk_none")
     app = FastAPI()
-    vs = BaseViewset(endpoint="/items", model=model, response_model=_NameSchema,
-                     db_session=sqlalchemy_stack.get_session, orm_adapter=sqlalchemy_stack)
+    vs = BaseViewset(
+        endpoint="/items",
+        model=model,
+        response_model=_NameSchema,
+        db_session=sqlalchemy_stack.get_session,
+        orm_adapter=sqlalchemy_stack,
+    )
     vs.register(methods=["POST"])
     app.include_router(vs)
     client = TestClient(app)
@@ -200,8 +233,13 @@ def test_b6_integrity_error_is_409_without_sql_leak(sqlalchemy_stack):
 
     model = _make_model(sqlalchemy_stack, "reg_conflict")
     app = FastAPI()
-    vs = BaseViewset(endpoint="/items", model=model, response_model=_NameSchema,
-                     db_session=sqlalchemy_stack.get_session, orm_adapter=sqlalchemy_stack)
+    vs = BaseViewset(
+        endpoint="/items",
+        model=model,
+        response_model=_NameSchema,
+        db_session=sqlalchemy_stack.get_session,
+        orm_adapter=sqlalchemy_stack,
+    )
     vs.register(methods=["POST"])
     app.include_router(vs)
     client = TestClient(app)
@@ -221,8 +259,13 @@ def test_m2_negative_pagination_rejected(sqlalchemy_stack):
 
     model = _make_model(sqlalchemy_stack, "reg_pagination")
     app = FastAPI()
-    vs = BaseViewset(endpoint="/items", model=model, response_model=_NameSchema,
-                     db_session=sqlalchemy_stack.get_session, orm_adapter=sqlalchemy_stack)
+    vs = BaseViewset(
+        endpoint="/items",
+        model=model,
+        response_model=_NameSchema,
+        db_session=sqlalchemy_stack.get_session,
+        orm_adapter=sqlalchemy_stack,
+    )
     vs.register(methods=["LIST"])
     app.include_router(vs)
     client = TestClient(app)
@@ -241,8 +284,13 @@ def test_m5_filters_documented_in_openapi(sqlalchemy_stack):
 
     model = _make_model(sqlalchemy_stack, "reg_openapi_filters")
     app = FastAPI()
-    vs = BaseViewset(endpoint="/items", model=model, response_model=FilterSchema,
-                     db_session=sqlalchemy_stack.get_session, orm_adapter=sqlalchemy_stack)
+    vs = BaseViewset(
+        endpoint="/items",
+        model=model,
+        response_model=FilterSchema,
+        db_session=sqlalchemy_stack.get_session,
+        orm_adapter=sqlalchemy_stack,
+    )
     vs.register(methods=["LIST"])
     app.include_router(vs)
     client = TestClient(app)
@@ -299,3 +347,101 @@ try:
 
 except ImportError:  # pragma: no cover - tortoise optional
     RegTortoiseModel = None
+
+
+# --- Coverage for the non-bound-method fallback in _register.py --------
+
+
+class _CustomPostHandler:
+    """A POST handler that is not a plain bound method (callable object).
+
+    ``register()`` must fall back to best-effort annotation patching on
+    the handler object itself instead of cloning the function.
+    """
+
+    __annotations__ = {"item": "ItemSchema"}
+
+    def __call__(self, item=None, token=None):
+        return {"status": True, "text": "created"}
+
+
+class _UnpatchablePostHandler(_CustomPostHandler):
+    """A callable whose ``__annotations__`` cannot be reassigned.
+
+    Registration must still succeed (patching is best-effort).
+    """
+
+    @property
+    def __annotations__(self):  # noqa: N805 - instance-level property
+        return {"item": "ItemSchema"}
+
+
+def test_register_patches_non_bound_method_handler():
+    """Callable-object handlers get the body schema merged into their
+    own annotations without breaking registration."""
+    from fastapi_viewsets import BaseViewset
+
+    vs = BaseViewset(endpoint="/custom", model=None, response_model=_NameSchema)
+    handler = _CustomPostHandler()
+    vs.create_element = handler
+
+    vs.register(methods=["POST"])
+
+    assert handler.__annotations__["item"] is _NameSchema
+    assert any(getattr(r, "path", None) == "/custom" for r in vs.routes)
+
+
+def test_register_tolerates_unpatchable_non_bound_method_handler():
+    """Best-effort patching: even a handler that rejects annotation
+    assignment must leave register() working."""
+    from fastapi_viewsets import BaseViewset
+
+    vs = BaseViewset(endpoint="/other", model=None, response_model=_NameSchema)
+    handler = _UnpatchablePostHandler()
+    vs.create_element = handler
+
+    vs.register(methods=["POST"])  # must not raise
+
+    # the untouched property still serves the original annotations
+    assert handler.__annotations__ == {"item": "ItemSchema"}
+    assert any(getattr(r, "path", None) == "/other" for r in vs.routes)
+
+
+# --- Coverage for the Query-default fallback in list() -----------------
+
+
+def test_m6_programmatic_list_non_int_pagination(test_model, test_schema, db_session_factory):
+    """Direct programmatic ``list()`` calls receive the unresolved
+    ``Query`` defaults; the handler must fall back to sane values (sync)."""
+    from fastapi_viewsets import BaseViewset
+
+    vs = BaseViewset(
+        endpoint="/test",
+        model=test_model,
+        response_model=test_schema,
+        db_session=db_session_factory,
+        tags=["Test"],
+    )
+
+    # no kwargs: limit/offset arrive as Query(...) objects, not ints
+    result = vs.list()
+    assert isinstance(result, list)
+
+
+@pytest.mark.asyncio
+async def test_m6_programmatic_async_list_non_int_pagination(
+    test_model, test_schema, async_db_session_factory
+):
+    """Same fallback for ``AsyncBaseViewset.list``."""
+    from fastapi_viewsets import AsyncBaseViewset
+
+    vs = AsyncBaseViewset(
+        endpoint="/test",
+        model=test_model,
+        response_model=test_schema,
+        db_session=async_db_session_factory,
+        tags=["Test"],
+    )
+
+    result = await vs.list()
+    assert isinstance(result, list)
