@@ -602,7 +602,13 @@ Key points when overriding:
 
 ## Authentication example
 
-`register()` accepts `OAuth2PasswordBearer` plus a list of logical operations (`POST`, `PUT`, …) that require a bearer token.
+`register()` accepts an authentication dependency plus a list of logical operations (`POST`, `PUT`, …).
+`OAuth2PasswordBearer` alone only extracts a bearer token and rejects a missing header;
+it does not verify signatures, expiration, users or permissions. The example below
+illustrates header extraction only. In production, pass a dependency that validates
+the token and rejects unauthorized callers, or enforce authentication and object-level
+authorization in your own handlers. Never treat an arbitrary bearer string as proof
+of identity.
 
 ```python
 from fastapi import FastAPI

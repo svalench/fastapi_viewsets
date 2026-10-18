@@ -8,13 +8,14 @@ collected here as a mixin to avoid two divergent copies.
 from __future__ import annotations
 
 import functools
+from copy import deepcopy
 import types
 from collections.abc import Iterable
 from typing import Any, Dict, List, Optional, Type
 
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, create_model, field_validator
 
 from fastapi_viewsets.constants import MAP_METHODS
 
@@ -29,7 +30,7 @@ _PARTIAL_MODEL_CACHE: Dict[type, type] = {}
 
 
 def _build_partial_model(model: Type[BaseModel]) -> Type[BaseModel]:
-    """Build an all-optional variant of a Pydantic schema for PATCH bodies.
+    """Build a variant with omittable fields for PATCH bodies.
 
     PATCH semantics require that clients may send any subset of fields,
     so required fields in the response schema must become optional in
@@ -46,9 +47,30 @@ def _build_partial_model(model: Type[BaseModel]) -> Type[BaseModel]:
 
     fields: Dict[str, Any] = {}
     for name, field_info in model.model_fields.items():
-        fields[name] = (Optional[field_info.annotation], None)
+        # Only field presence changes. Copy the FieldInfo so constraints,
+        # aliases and metadata survive without mutating the original schema.
+        patch_field = deepcopy(field_info)
+        patch_field.default = None
+        patch_field.default_factory = None
+        patch_field.validate_default = False
+        fields[name] = (field_info.annotation, patch_field)
 
-    partial = create_model(f"{model.__name__}Patch", **fields)
+    # Field validators can validate supplied values independently. Full-model
+    # validators cannot run against an incomplete PATCH (required peers may be
+    # absent), so do not inherit the source model itself. Pydantic stores
+    # inherited decorators here as well; reapply them through its public API.
+    validators: Dict[str, Any] = {}
+    for name, decorator in model.__pydantic_decorators__.field_validators.items():
+        info = decorator.info
+        validators[name] = field_validator(
+            *info.fields, mode=info.mode, check_fields=info.check_fields
+        )(decorator.func)
+    partial = create_model(
+        f"{model.__name__}Patch",
+        __config__=dict(model.model_config),
+        __validators__=validators,
+        **fields,
+    )
     _PARTIAL_MODEL_CACHE[model] = partial
     return partial
 

@@ -239,6 +239,8 @@ class TortoiseAdapter(BaseORMAdapter):
             
             instance = await model.create(**data)
             return instance
+        except HTTPException:
+            raise
         except TortoiseIntegrityError as e:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -289,7 +291,13 @@ class TortoiseAdapter(BaseORMAdapter):
         for key, value in data.items():
             setattr(instance, key, value)
         
-        await instance.save()
+        try:
+            await instance.save()
+        except TortoiseIntegrityError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Integrity error: a database constraint was violated",
+            ) from exc
         return instance
     
     def update_element(

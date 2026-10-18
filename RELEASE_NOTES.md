@@ -1,5 +1,12 @@
 # Release Notes
 
+## Version 1.5.3
+
+- Preserve field constraints, aliases, schema configuration and field validators in PATCH bodies; reject explicit null for nonnullable fields while allowing omitted fields.
+- Honor SQLAlchemy client/server defaults and Peewee defaults when creating records.
+- Preserve required-field validation errors in async SQLAlchemy, Tortoise and Peewee; return a safe HTTP 409 on Tortoise/Peewee update constraint violations.
+- Treat release version inputs as data and serialize publishing workflows without changing publishing credentials.
+
 ## Version 1.5.2
 
 Bugfix release for the CRUD write paths: multi-viewset body-schema leak,

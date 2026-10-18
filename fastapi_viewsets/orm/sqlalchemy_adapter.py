@@ -323,7 +323,8 @@ class SQLAlchemyAdapter(BaseORMAdapter):
 
             # Validate required fields
             required_fields = {col.name for col in model.__table__.columns 
-                             if not col.nullable and col.name != 'id' and not col.primary_key}
+                             if not col.nullable and col.name != 'id' and not col.primary_key
+                             and col.default is None and col.server_default is None}
             provided_fields = {k for k, v in data.items() if v is not None}
             missing_fields = required_fields - provided_fields
             if missing_fields:
@@ -377,7 +378,8 @@ class SQLAlchemyAdapter(BaseORMAdapter):
 
             # Validate required fields
             required_fields = {col.name for col in model.__table__.columns 
-                             if not col.nullable and col.name != 'id' and not col.primary_key}
+                             if not col.nullable and col.name != 'id' and not col.primary_key
+                             and col.default is None and col.server_default is None}
             provided_fields = {k for k, v in data.items() if v is not None}
             missing_fields = required_fields - provided_fields
             if missing_fields:
@@ -391,6 +393,9 @@ class SQLAlchemyAdapter(BaseORMAdapter):
             await db.commit()
             await db.refresh(queryset)
             return queryset
+        except HTTPException:
+            await db.rollback()
+            raise
         except IntegrityError as e:
             await db.rollback()
             raise HTTPException(

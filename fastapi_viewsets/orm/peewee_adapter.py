@@ -223,7 +223,8 @@ class PeeweeAdapter(BaseORMAdapter):
             # Validate required fields
             required_fields = set()
             for field_name, field in model._meta.fields.items():
-                if field.null is False and field_name != 'id' and not field.primary_key:
+                if (field.null is False and field_name != 'id'
+                        and not field.primary_key and field.default is None):
                     required_fields.add(field_name)
             
             provided_fields = {k for k, v in data.items() if v is not None}
@@ -236,6 +237,8 @@ class PeeweeAdapter(BaseORMAdapter):
             
             instance = model.create(**data)
             return instance
+        except HTTPException:
+            raise
         except PeeweeIntegrityError as e:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -284,7 +287,13 @@ class PeeweeAdapter(BaseORMAdapter):
         for key, value in data.items():
             setattr(instance, key, value)
         
-        instance.save()
+        try:
+            instance.save()
+        except PeeweeIntegrityError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Integrity error: a database constraint was violated",
+            ) from exc
         return instance
     
     async def update_element_async(

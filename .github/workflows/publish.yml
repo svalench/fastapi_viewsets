@@ -10,6 +10,10 @@ on:
         required: true
         type: string
 
+concurrency:
+  group: pypi-fastapi-viewsets
+  cancel-in-progress: false
+
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
