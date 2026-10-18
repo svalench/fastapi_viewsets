@@ -8,9 +8,9 @@ collected here as a mixin to avoid two divergent copies.
 from __future__ import annotations
 
 import functools
-from copy import deepcopy
 import types
 from collections.abc import Iterable
+from copy import deepcopy
 from typing import Any, Dict, List, Optional, Type
 
 from fastapi import Depends
@@ -59,7 +59,7 @@ def _build_partial_model(model: Type[BaseModel]) -> Type[BaseModel]:
     # validators cannot run against an incomplete PATCH (required peers may be
     # absent), so do not inherit the source model itself. Pydantic stores
     # inherited decorators here as well; reapply them through its public API.
-    validators: Dict[str, Any] = {}
+    validators: dict[str, Any] = {}
     for name, decorator in model.__pydantic_decorators__.field_validators.items():
         info = decorator.info
         # Keep the original class binding, including ClassVar and super().
