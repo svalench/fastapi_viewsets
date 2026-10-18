@@ -57,6 +57,19 @@ need an ASGI server, e.g. `pip install uvicorn`.
 
 For async SQLAlchemy you still need a driver such as `aiosqlite`, `asyncpg`, or `aiomysql` alongside your database URL.
 
+## Security and Python support
+
+Python 3.9 remains functionally tested for compatibility, but cannot resolve a
+fully patched dependency stack. As of the October 2026 audit, its available
+AnyIO, Starlette and python-dotenv versions have published security advisories;
+the fixed upstream releases require Python 3.10 or newer. The Python 3.9 test
+stack also contains an affected pytest version. Applicability depends on which
+upstream APIs the application uses, and passing tests does not remove these risks.
+
+For security-sensitive deployments, use Python 3.11 or newer and current
+dependencies. Upgrade dependencies in a clean environment and rerun your
+application's tests; retaining old dependency pins can retain known vulnerabilities.
+
 ## Database connection examples
 
 `fastapi-viewsets` doesn't bundle DB drivers — you pick them per stack.
@@ -602,7 +615,13 @@ Key points when overriding:
 
 ## Authentication example
 
-`register()` accepts `OAuth2PasswordBearer` plus a list of logical operations (`POST`, `PUT`, …) that require a bearer token.
+`register()` accepts an authentication dependency plus a list of logical operations (`POST`, `PUT`, …).
+`OAuth2PasswordBearer` alone only extracts a bearer token and rejects a missing header;
+it does not verify signatures, expiration, users or permissions. The example below
+illustrates header extraction only. In production, pass a dependency that validates
+the token and rejects unauthorized callers, or enforce authentication and object-level
+authorization in your own handlers. Never treat an arbitrary bearer string as proof
+of identity.
 
 ```python
 from fastapi import FastAPI
