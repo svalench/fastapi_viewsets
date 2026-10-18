@@ -2,6 +2,8 @@
 
 ## Version 1.5.3
 
+Security note: Python 3.9 is functionally tested but its upstream dependencies have known advisories whose fixes require newer Python. Use Python 3.11+ and current dependencies for security-sensitive deployments; see README.
+
 - Preserve field constraints, aliases, schema configuration and field validators in PATCH bodies; reject explicit null for nonnullable fields while allowing omitted fields.
 - Honor SQLAlchemy client/server defaults and Peewee defaults when creating records.
 - Preserve required-field validation errors in async SQLAlchemy, Tortoise and Peewee; return a safe HTTP 409 on Tortoise/Peewee update constraint violations.

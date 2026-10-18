@@ -12,3 +12,12 @@ HTTP 409 without SQL or submitted values in the response.
 
 Release version input is validated outside the shell, and publishing workflows
 share a concurrency group. Existing token/OIDC configuration is unchanged.
+
+## Legacy-runtime limitation
+
+Python 3.9 remains functionally supported but its resolvable AnyIO, Starlette,
+python-dotenv and test-only pytest versions contain known upstream advisories.
+The fixed releases require Python >=3.10, so these dependencies cannot be fully
+remediated on 3.9. Use Python 3.11+ with current dependencies for security-sensitive
+deployments. The current Python 3.10 and 3.14 dependency resolutions audited clean;
+this does not certify every older combination allowed by the dependency ranges.
