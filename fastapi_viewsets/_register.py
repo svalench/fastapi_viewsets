@@ -62,9 +62,10 @@ def _build_partial_model(model: Type[BaseModel]) -> Type[BaseModel]:
     validators: Dict[str, Any] = {}
     for name, decorator in model.__pydantic_decorators__.field_validators.items():
         info = decorator.info
+        # Keep the original class binding, including ClassVar and super().
         validators[name] = field_validator(
             *info.fields, mode=info.mode, check_fields=info.check_fields
-        )(decorator.func)
+        )(staticmethod(decorator.func))
     partial = create_model(
         f"{model.__name__}Patch",
         __config__=dict(model.model_config),

@@ -6,6 +6,7 @@ from fastapi import HTTPException
 @pytest.fixture
 def sqlalchemy_model(tmp_path):
     from sqlalchemy import Column, Integer, String, text
+
     from fastapi_viewsets.orm.sqlalchemy_adapter import SQLAlchemyAdapter
     adapter = SQLAlchemyAdapter(database_url=f"sqlite:///{tmp_path}/defaults.db")
     base = adapter.get_base()
