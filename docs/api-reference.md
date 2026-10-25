@@ -19,6 +19,8 @@ BaseViewset(
     db_session: Optional[Callable[[], Any]] = None,
     response_model: Optional[Type[BaseModel]] = None,
     orm_adapter: Optional[BaseORMAdapter] = None,
+    soft_delete: Optional[SoftDeleteConfig] = None,
+    nested: Optional[NestedConfig] = None,
     **kwargs,  # forwarded to APIRouter
 )
 ```
@@ -31,9 +33,17 @@ BaseViewset(
 | `db_session` | `Optional[Callable]` | `None` | Database session factory function |
 | `response_model` | `Optional[Type[BaseModel]]` | `None` | Pydantic schema for request/response bodies |
 | `orm_adapter` | `Optional[BaseORMAdapter]` | `None` | ORM adapter; resolved from config when omitted |
+| `soft_delete` | `Optional[SoftDeleteConfig]` | `None` | Opt-in boolean/timestamp deletion policy; see [Soft Delete & Restore](soft-delete.md) |
+| `nested` | `Optional[NestedConfig]` | `None` | Parent lookup and scoped child CRUD; see [Nested Resources](nested-resources.md) |
 | `**kwargs` | — | — | Forwarded to `fastapi.APIRouter` (e.g. `tags`, `prefix`, `dependencies`) |
 
 ### CRUD handlers
+
+Nested viewsets expose `get_parent()` inside generated handlers and
+`request.state.viewset_parent` for dependencies/custom routes. Override
+`resolve_parent(request)` (`async def` on `AsyncBaseViewset`) to enforce parent
+access permissions. `parent_context(request)` is a dependency for custom routes.
+See [Nested Resources](nested-resources.md) for signatures and configuration.
 
 #### `list()`
 
@@ -106,6 +116,17 @@ def delete_element(
 ```
 
 Delete an item by ID. Returns `{"status": True, "text": "successfully deleted"}` or `{"status": False, "text": "deletion failed"}`.
+
+With `soft_delete` configured, DELETE marks the row deleted instead of removing
+it. LIST/GET hide deleted records, and PUT/PATCH/DELETE return 404 for them.
+
+#### `restore_element()`
+
+Available as `POST /{id}/restore` when soft deletion and DELETE are registered,
+or when `methods=["RESTORE"]` is explicitly requested. Restores a deleted record
+and returns `{"status": True, "text": "successfully restored"}`. Active or missing
+IDs return 404; constraint conflicts return 409. RESTORE inherits DELETE's OAuth2
+protection. See [Soft Delete & Restore](soft-delete.md).
 
 ---
 

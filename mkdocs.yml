@@ -51,6 +51,8 @@ nav:
   - Guides:
     - ORM Adapters: orm-adapters.md
     - Eager Loading: eager-loading.md
+    - Soft Delete & Restore: soft-delete.md
+    - Nested Resources: nested-resources.md
     - Overriding Handlers: overrides.md
     - Authentication: authentication.md
     - Pagination & Filtering: pagination-filtering.md

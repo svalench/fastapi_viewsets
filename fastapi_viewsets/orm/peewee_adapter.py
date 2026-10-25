@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from starlette import status
 
 from fastapi_viewsets.orm.base import BaseORMAdapter, ModelType
+from fastapi_viewsets.soft_delete import SoftDeleteConfig
 
 if TYPE_CHECKING:
     from peewee import Database
@@ -21,6 +22,9 @@ except ImportError:
 class PeeweeAdapter(BaseORMAdapter):
     """Peewee ORM adapter implementation."""
     
+    supports_soft_delete = True
+    supports_nested = True
+
     def __init__(
         self,
         database_url: str,
@@ -108,12 +112,17 @@ class PeeweeAdapter(BaseORMAdapter):
         search_fields: Optional[List[str]] = None,
         ordering: Optional[List[str]] = None,
         filters: Optional[Dict[str, Tuple[str, Any]]] = None,
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> List[ModelType]:
         """Get list of elements from database with pagination support (synchronous)."""
         if limit == 0:
             return []
         
-        queryset = model.select()
+        queryset = self._scope_query(model, model.select(), scope)
+        if soft_delete is not None:
+            queryset = queryset.where(self._soft_delete_clause(model, soft_delete))
         if select_related:
             for rel_name in select_related:
                 related_model = getattr(model, rel_name).rel_model
@@ -184,10 +193,15 @@ class PeeweeAdapter(BaseORMAdapter):
         id: Union[int, str],
         select_related: Optional[List[str]] = None,
         prefetch_related: Optional[List[str]] = None,
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> ModelType:
         """Get single element by ID from database (synchronous)."""
         try:
-            queryset = model.select()
+            queryset = self._scope_query(model, model.select(), scope)
+            if soft_delete is not None:
+                queryset = queryset.where(self._soft_delete_clause(model, soft_delete))
             if select_related:
                 for rel_name in select_related:
                     related_model = getattr(model, rel_name).rel_model
@@ -212,9 +226,16 @@ class PeeweeAdapter(BaseORMAdapter):
         self,
         model: Type[ModelType],
         db_session: Callable[[], Any],
-        data: Dict[str, Any]
+        data: Dict[str, Any],
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> ModelType:
         """Create new element in database (synchronous)."""
+        if scope is not None:
+            data = self._scoped_data(model, data, scope, create=True)
+        if soft_delete is not None:
+            data = soft_delete.create_data(data)
         try:
             # Never pass a NULL primary key explicitly.
             pk_name = getattr(model._meta.primary_key, "name", "id")
@@ -265,11 +286,23 @@ class PeeweeAdapter(BaseORMAdapter):
         db_session: Callable[[], Any],
         id: Union[int, str],
         data: Dict[str, Any],
-        partial: bool = False
+        partial: bool = False,
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> ModelType:
         """Update element in database (synchronous)."""
         try:
-            instance = model.get_by_id(id)
+            if soft_delete is not None or scope is not None:
+                query = self._scope_query(model, model.select(), scope).where(model.id == id)
+                if soft_delete is not None:
+                    query = query.where(self._soft_delete_clause(model, soft_delete))
+                    data = soft_delete.update_data(data)
+                if scope is not None:
+                    data = self._scoped_data(model, data, scope)
+                instance = query.get()
+            else:
+                instance = model.get_by_id(id)
         except DoesNotExist:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -288,7 +321,15 @@ class PeeweeAdapter(BaseORMAdapter):
             setattr(instance, key, value)
         
         try:
-            instance.save()
+            if soft_delete is not None or scope is not None:
+                query = self._scope_query(model, model.update(**data), scope).where(model.id == id)
+                if soft_delete is not None:
+                    query = query.where(self._soft_delete_clause(model, soft_delete))
+                changed = query.execute()
+                if not changed:
+                    raise HTTPException(status_code=404, detail="Element not found")
+            else:
+                instance.save()
         except PeeweeIntegrityError as exc:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -311,11 +352,19 @@ class PeeweeAdapter(BaseORMAdapter):
         self,
         model: Type[ModelType],
         db_session: Callable[[], Any],
-        id: Union[int, str]
+        id: Union[int, str],
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Delete element from database by ID (synchronous)."""
+        if soft_delete is not None:
+            return self._change_deleted_state(model, id, soft_delete, restore=False, scope=scope)
         try:
-            instance = model.get_by_id(id)
+            if scope is not None:
+                instance = self._scope_query(model, model.select(), scope).where(model.id == id).get()
+            else:
+                instance = model.get_by_id(id)
             instance.delete_instance()
             return True
         except DoesNotExist:
@@ -349,3 +398,56 @@ class PeeweeAdapter(BaseORMAdapter):
             }
         return columns
 
+    @staticmethod
+    def _soft_delete_clause(model, config, *, deleted=False):
+        column = getattr(model, config.field)
+        if config.mode == "timestamp":
+            return column.is_null(not deleted)
+        return column == deleted
+
+    def _change_deleted_state(self, model, id, config, *, restore, scope=None):
+        try:
+            value = config.active_value if restore else config.deleted_value()
+            query = self._scope_query(model, model.update(**{config.field: value}), scope)
+            changed = query.where(
+                model.id == id, self._soft_delete_clause(model, config, deleted=restore)
+            ).execute()
+            if not changed:
+                raise HTTPException(status_code=404, detail="Element not found")
+            return True
+        except PeeweeIntegrityError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail="Integrity error: a database constraint was violated",
+            ) from exc
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="Database error") from exc
+
+    def restore_element(self, model, db_session, id, *, soft_delete: SoftDeleteConfig, scope=None) -> bool:
+        return self._change_deleted_state(model, id, soft_delete, restore=True, scope=scope)
+
+    @staticmethod
+    def _scope_query(model, query, scope):
+        for field, value in (scope or {}).items():
+            query = query.where(getattr(model, field) == value)
+        return query
+
+    def get_nested_field(self, model, field):
+        for name, info in model._meta.fields.items():
+            aliases = tuple({name, info.column_name, getattr(info, "object_id_name", name)})
+            if field in aliases:
+                if info.primary_key:
+                    break
+                return name, aliases
+        raise ValueError("nested foreign key must be an existing non-primary-key field")
+
+    def validate_nested_parent(self, model, field, parent_model):
+        info = model._meta.fields[field]
+        related = getattr(info, "rel_model", None)
+        if related is not None and related is not parent_model:
+            raise ValueError("nested foreign key references a different parent model")
+        related_field = getattr(info, "rel_field", None)
+        if related_field is not None and related_field.name != "id":
+            raise ValueError("nested foreign key must reference the parent's id")

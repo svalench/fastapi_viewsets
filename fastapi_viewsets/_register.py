@@ -24,6 +24,8 @@ from fastapi_viewsets.constants import MAP_METHODS
 # the ``/{id}`` route.
 _METHOD_ORDER = ("LIST", "POST", "GET", "PUT", "PATCH", "DELETE")
 
+_RESTORE_SPEC = {"method": "restore_element", "http_method": "POST", "path": "/{id}/restore"}
+
 # Cache of generated partial (all-optional) PATCH body models, keyed by
 # the source schema, so repeated ``register()`` calls reuse one model.
 _PARTIAL_MODEL_CACHE: Dict[type, type] = {}
@@ -135,11 +137,13 @@ class _RegisterMixin:
             methods: Logical methods to register. Defaults to all
                 allowed methods. Allowed values:
                 ``LIST``, ``GET``, ``POST``, ``PUT``, ``PATCH``,
-                ``DELETE``.
+                ``DELETE``. Soft-delete viewsets also accept ``RESTORE``;
+                registering DELETE automatically includes RESTORE.
             oauth_protect: ``OAuth2PasswordBearer`` instance used as a
                 FastAPI dependency on protected operations.
             protected_methods: Subset of ``methods`` that should require
-                the bearer token. Ignored if ``oauth_protect`` is None.
+                the bearer token. RESTORE inherits DELETE protection.
+                Ignored if ``oauth_protect`` is None.
         """
         protected_methods = list(protected_methods or [])
 
@@ -150,6 +154,17 @@ class _RegisterMixin:
                 'methods must be List of methods (e.g. ["GET"])'
             )
 
+        methods = list(methods)
+        soft_delete = getattr(self, "soft_delete", None)
+        if soft_delete is not None:
+            if "DELETE" in methods and "RESTORE" not in methods:
+                methods.append("RESTORE")
+            # A protected DELETE must not expose an unprotected way to undo it.
+            if "DELETE" in protected_methods and "RESTORE" not in protected_methods:
+                protected_methods.append("RESTORE")
+        elif "RESTORE" in methods:
+            raise ValueError("RESTORE requires soft_delete configuration")
+
         # Sort so LIST is registered before GET/{id}.
         sorted_methods = sorted(
             methods,
@@ -157,7 +172,7 @@ class _RegisterMixin:
         )
 
         for method in sorted_methods:
-            spec = MAP_METHODS.get(method)
+            spec = _RESTORE_SPEC if method == "RESTORE" else MAP_METHODS.get(method)
             if not spec:
                 raise ValueError(
                     f"Unknown method: {method}. "
@@ -178,9 +193,12 @@ class _RegisterMixin:
                 body_model = self.response_model
                 if spec["http_method"] == "PATCH":
                     body_model = _build_partial_model(self.response_model)
+                if getattr(self, "nested", None) is not None:
+                    body_model = self._nested_body_model(body_model)
                 handler = _clone_bound_method(handler, {"item": body_model})
 
             original_doc = handler.__doc__
+            handler_globals = getattr(handler, "__globals__", {})
 
             # PUT vs PATCH share an underlying handler but differ in the
             # ``partial`` flag.
@@ -194,10 +212,23 @@ class _RegisterMixin:
                 handler = functools.partial(handler, token=Depends(oauth_protect))
                 handler.__doc__ = original_doc
 
+            if isinstance(handler, functools.partial):
+                # Older FastAPI resolves postponed annotations using the
+                # callable's globals. A partial does not expose them itself.
+                handler.__globals__ = handler_globals
+
             endpoint = (self.endpoint or "") + spec.get("path", "")
             response_model = self._build_response_model(spec)
             route_name = self._build_route_name(method)
             openapi_extra = self._build_openapi_extra(spec)
+            dependencies = []
+            if getattr(self, "nested", None) is not None:
+                # Authenticate before revealing whether a parent exists. The
+                # handler's token dependency reuses FastAPI's dependency cache.
+                if method in protected_methods and oauth_protect is not None:
+                    dependencies.append(Depends(oauth_protect))
+                dependencies.append(Depends(self.parent_context))
+                openapi_extra = self._nested_openapi_extra(openapi_extra)
 
             self.add_api_route(
                 endpoint,
@@ -207,6 +238,7 @@ class _RegisterMixin:
                 methods=[spec["http_method"]],
                 name=route_name,
                 openapi_extra=openapi_extra,
+                dependencies=dependencies,
             )
 
     # --- helpers ---------------------------------------------------
@@ -253,7 +285,7 @@ class _RegisterMixin:
 
     def _build_response_model(self, spec):
         """Compute the FastAPI ``response_model`` for a given method spec."""
-        if spec.get("http_method") == "DELETE":
+        if spec.get("http_method") == "DELETE" or spec.get("method") == "restore_element":
             return None
         if self.response_model is None:
             return None

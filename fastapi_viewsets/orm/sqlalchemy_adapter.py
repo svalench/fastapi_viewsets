@@ -12,6 +12,7 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from fastapi_viewsets._compat import to_async_database_url
 from fastapi_viewsets.orm.base import BaseORMAdapter, ModelType
+from fastapi_viewsets.soft_delete import SoftDeleteConfig
 
 try:
     from sqlalchemy import create_engine, Engine
@@ -26,6 +27,9 @@ except ImportError:
 class SQLAlchemyAdapter(BaseORMAdapter):
     """SQLAlchemy ORM adapter implementation."""
     
+    supports_soft_delete = True
+    supports_nested = True
+
     def __init__(
         self,
         database_url: str,
@@ -187,6 +191,9 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         search_fields: Optional[List[str]] = None,
         ordering: Optional[List[str]] = None,
         filters: Optional[Dict[str, Tuple[str, Any]]] = None,
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> List[ModelType]:
         """Get list of elements from database with pagination support (synchronous)."""
         db = db_session()
@@ -194,7 +201,8 @@ class SQLAlchemyAdapter(BaseORMAdapter):
             if limit == 0:
                 return []
             
-            queryset = db.query(model)
+            queryset = self._soft_delete_scope(model, db.query(model), soft_delete)
+            queryset = self._scope_query(model, queryset, scope)
             if select_related:
                 for rel_name in select_related:
                     queryset = queryset.options(joinedload(getattr(model, rel_name)))
@@ -224,6 +232,9 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         search_fields: Optional[List[str]] = None,
         ordering: Optional[List[str]] = None,
         filters: Optional[Dict[str, Tuple[str, Any]]] = None,
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> List[ModelType]:
         """Get list of elements from database with pagination support (asynchronous)."""
         db = db_session()
@@ -231,7 +242,8 @@ class SQLAlchemyAdapter(BaseORMAdapter):
             if limit == 0:
                 return []
             
-            stmt = select(model)
+            stmt = self._soft_delete_scope(model, select(model), soft_delete)
+            stmt = self._scope_query(model, stmt, scope)
             if select_related:
                 for rel_name in select_related:
                     stmt = stmt.options(joinedload(getattr(model, rel_name)))
@@ -257,11 +269,15 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         id: Union[int, str],
         select_related: Optional[List[str]] = None,
         prefetch_related: Optional[List[str]] = None,
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> ModelType:
         """Get single element by ID from database (synchronous)."""
         db = db_session()
         try:
-            queryset = db.query(model)
+            queryset = self._soft_delete_scope(model, db.query(model), soft_delete)
+            queryset = self._scope_query(model, queryset, scope)
             if select_related:
                 for rel_name in select_related:
                     queryset = queryset.options(joinedload(getattr(model, rel_name)))
@@ -285,11 +301,15 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         id: Union[int, str],
         select_related: Optional[List[str]] = None,
         prefetch_related: Optional[List[str]] = None,
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> ModelType:
         """Get single element by ID from database (asynchronous)."""
         db = db_session()
         try:
-            stmt = select(model).where(getattr(model, 'id') == id)
+            stmt = self._soft_delete_scope(model, select(model), soft_delete).where(getattr(model, 'id') == id)
+            stmt = self._scope_query(model, stmt, scope)
             if select_related:
                 for rel_name in select_related:
                     stmt = stmt.options(joinedload(getattr(model, rel_name)))
@@ -311,9 +331,16 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         self,
         model: Type[ModelType],
         db_session: Callable[[], Session],
-        data: Dict[str, Any]
+        data: Dict[str, Any],
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> ModelType:
         """Create new element in database (synchronous)."""
+        if scope is not None:
+            data = self._scoped_data(model, data, scope, create=True)
+        if soft_delete is not None:
+            data = soft_delete.create_data(data)
         db = db_session()
         try:
             # Never pass a NULL primary key explicitly — some backends
@@ -326,6 +353,10 @@ class SQLAlchemyAdapter(BaseORMAdapter):
                              if not col.nullable and col.name != 'id' and not col.primary_key
                              and col.default is None and col.server_default is None}
             provided_fields = {k for k, v in data.items() if v is not None}
+            if scope is not None:
+                for field in scope:
+                    _, aliases = self.get_nested_field(model, field)
+                    provided_fields.update(aliases)
             missing_fields = required_fields - provided_fields
             if missing_fields:
                 raise HTTPException(
@@ -366,9 +397,16 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         self,
         model: Type[ModelType],
         db_session: Callable[[], AsyncSession],
-        data: Dict[str, Any]
+        data: Dict[str, Any],
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> ModelType:
         """Create new element in database (asynchronous)."""
+        if scope is not None:
+            data = self._scoped_data(model, data, scope, create=True)
+        if soft_delete is not None:
+            data = soft_delete.create_data(data)
         db = db_session()
         try:
             # Never pass a NULL primary key explicitly — some backends
@@ -381,6 +419,10 @@ class SQLAlchemyAdapter(BaseORMAdapter):
                              if not col.nullable and col.name != 'id' and not col.primary_key
                              and col.default is None and col.server_default is None}
             provided_fields = {k for k, v in data.items() if v is not None}
+            if scope is not None:
+                for field in scope:
+                    _, aliases = self.get_nested_field(model, field)
+                    provided_fields.update(aliases)
             missing_fields = required_fields - provided_fields
             if missing_fields:
                 raise HTTPException(
@@ -423,12 +465,21 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         db_session: Callable[[], Session],
         id: Union[int, str],
         data: Dict[str, Any],
-        partial: bool = False
+        partial: bool = False,
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> ModelType:
         """Update element in database (synchronous)."""
         db = db_session()
         try:
-            result = db.query(model).filter(getattr(model, 'id') == id).first()
+            query = self._scope_query(model, db.query(model), scope).filter(getattr(model, 'id') == id)
+            if scope is not None:
+                data = self._scoped_data(model, data, scope)
+            if soft_delete is not None:
+                query = self._soft_delete_scope(model, query, soft_delete)
+                data = soft_delete.update_data(data)
+            result = query.first()
             if not result:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -448,7 +499,9 @@ class SQLAlchemyAdapter(BaseORMAdapter):
                 db.refresh(result)
                 return result
             
-            db.query(model).filter(getattr(model, 'id') == id).update(data, synchronize_session=False)
+            changed = query.update(data, synchronize_session=False)
+            if (soft_delete is not None or scope is not None) and not changed:
+                raise HTTPException(status_code=404, detail="Element not found")
             db.commit()
             db.refresh(result)
             return result
@@ -482,12 +535,28 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         db_session: Callable[[], AsyncSession],
         id: Union[int, str],
         data: Dict[str, Any],
-        partial: bool = False
+        partial: bool = False,
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> ModelType:
         """Update element in database (asynchronous)."""
         db = db_session()
         try:
-            result = await db.get(model, id)
+            if soft_delete is not None or scope is not None:
+                from sqlalchemy import update
+
+                query = self._soft_delete_scope(model, select(model), soft_delete).where(
+                    model.id == id
+                )
+                query = self._scope_query(model, query, scope)
+                if scope is not None:
+                    data = self._scoped_data(model, data, scope)
+                if soft_delete is not None:
+                    data = soft_delete.update_data(data)
+                result = (await db.execute(query)).unique().scalar_one_or_none()
+            else:
+                result = await db.get(model, id)
             if not result:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -507,8 +576,19 @@ class SQLAlchemyAdapter(BaseORMAdapter):
                 await db.refresh(result)
                 return result
             
-            for key, value in data.items():
-                setattr(result, key, value)
+            if soft_delete is not None or scope is not None:
+                statement = self._soft_delete_scope(model, update(model), soft_delete).where(
+                    model.id == id
+                )
+                statement = self._scope_query(model, statement, scope)
+                changed = await db.execute(
+                    statement.values(**data).execution_options(synchronize_session=False)
+                )
+                if not changed.rowcount:
+                    raise HTTPException(status_code=404, detail="Element not found")
+            else:
+                for key, value in data.items():
+                    setattr(result, key, value)
             
             await db.commit()
             await db.refresh(result)
@@ -541,12 +621,21 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         self,
         model: Type[ModelType],
         db_session: Callable[[], Session],
-        id: Union[int, str]
+        id: Union[int, str],
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Delete element from database by ID (synchronous)."""
+        if soft_delete is not None:
+            return self._change_deleted_state(model, db_session, id, soft_delete, restore=False, scope=scope)
         db = db_session()
         try:
-            result = db.get(model, id)
+            if scope is not None:
+                query = self._scope_query(model, db.query(model), scope).filter(model.id == id)
+                result = query.with_for_update(of=model).one_or_none()
+            else:
+                result = db.get(model, id)
             if not result:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -577,12 +666,21 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         self,
         model: Type[ModelType],
         db_session: Callable[[], AsyncSession],
-        id: Union[int, str]
+        id: Union[int, str],
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Delete element from database by ID (asynchronous)."""
+        if soft_delete is not None:
+            return await self._change_deleted_state_async(model, db_session, id, soft_delete, restore=False, scope=scope)
         db = db_session()
         try:
-            result = await db.get(model, id)
+            if scope is not None:
+                statement = self._scope_query(model, select(model), scope).where(model.id == id)
+                result = (await db.execute(statement.with_for_update(of=model))).unique().scalar_one_or_none()
+            else:
+                result = await db.get(model, id)
             if not result:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -620,3 +718,116 @@ class SQLAlchemyAdapter(BaseORMAdapter):
             }
         return columns
 
+    @staticmethod
+    def _soft_delete_scope(model, query, config, *, deleted=False):
+        if config is None:
+            return query
+        column = getattr(model, config.field)
+        if config.mode == "timestamp":
+            clause = column.is_not(None) if deleted else column.is_(None)
+        else:
+            clause = column.is_(deleted)
+        return query.filter(clause)
+
+    def _change_deleted_state(self, model, db_session, id, config, *, restore, scope=None):
+        db = db_session()
+        try:
+            query = self._soft_delete_scope(model, db.query(model), config, deleted=restore)
+            query = self._scope_query(model, query, scope)
+            value = config.active_value if restore else config.deleted_value()
+            changed = query.filter(model.id == id).update(
+                {config.field: value}, synchronize_session=False
+            )
+            if not changed:
+                raise HTTPException(status_code=404, detail="Element not found")
+            db.commit()
+            return True
+        except IntegrityError as exc:
+            db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="Integrity error: a database constraint was violated",
+            ) from exc
+        except HTTPException:
+            db.rollback()
+            raise
+        except SQLAlchemyError as exc:
+            db.rollback()
+            raise HTTPException(status_code=400, detail="Database error") from exc
+        finally:
+            db.close()
+
+    async def _change_deleted_state_async(self, model, db_session, id, config, *, restore, scope=None):
+        from sqlalchemy import update
+
+        db = db_session()
+        try:
+            statement = self._soft_delete_scope(model, update(model), config, deleted=restore)
+            statement = self._scope_query(model, statement, scope)
+            value = config.active_value if restore else config.deleted_value()
+            result = await db.execute(
+                statement.where(model.id == id).values(**{config.field: value})
+                .execution_options(synchronize_session=False)
+            )
+            if not result.rowcount:
+                raise HTTPException(status_code=404, detail="Element not found")
+            await db.commit()
+            return True
+        except IntegrityError as exc:
+            await db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="Integrity error: a database constraint was violated",
+            ) from exc
+        except HTTPException:
+            await db.rollback()
+            raise
+        except SQLAlchemyError as exc:
+            await db.rollback()
+            raise HTTPException(status_code=400, detail="Database error") from exc
+        finally:
+            await db.close()
+
+    def restore_element(self, model, db_session, id, *, soft_delete: SoftDeleteConfig, scope=None) -> bool:
+        return self._change_deleted_state(model, db_session, id, soft_delete, restore=True, scope=scope)
+
+    async def restore_element_async(self, model, db_session, id, *, soft_delete: SoftDeleteConfig, scope=None) -> bool:
+        return await self._change_deleted_state_async(model, db_session, id, soft_delete, restore=True, scope=scope)
+
+    @staticmethod
+    def _scope_query(model, query, scope):
+        for field, value in (scope or {}).items():
+            query = query.filter(getattr(model, field) == value)
+        return query
+
+    def get_nested_field(self, model, field):
+        from sqlalchemy import inspect
+
+        attribute = inspect(model).column_attrs.get(field)
+        if attribute is None or len(attribute.columns) != 1 or attribute.columns[0].primary_key:
+            raise ValueError("nested foreign key must be an existing non-primary-key field")
+        return field, tuple({field, attribute.columns[0].name})
+
+    def get_nested_parent_type(self, model):
+        from uuid import UUID
+        from sqlalchemy import inspect
+
+        attribute = inspect(model).column_attrs.get("id")
+        if (attribute is None or len(attribute.columns) != 1 or not attribute.columns[0].primary_key
+                or len(inspect(model).primary_key) != 1):
+            raise ValueError("parent model must expose its primary key as 'id'")
+        try:
+            kind = attribute.columns[0].type.python_type
+        except NotImplementedError:
+            return str
+        return kind if kind in (int, str, UUID) else str
+
+    def validate_nested_parent(self, model, field, parent_model):
+        from sqlalchemy import inspect
+
+        column = inspect(model).column_attrs[field].columns[0]
+        parent_column = inspect(parent_model).column_attrs["id"].columns[0]
+        for reference in column.foreign_keys:
+            target = reference.column
+            if target.table.fullname != parent_column.table.fullname or target.name != parent_column.name:
+                raise ValueError("nested foreign key references a different parent model or key")

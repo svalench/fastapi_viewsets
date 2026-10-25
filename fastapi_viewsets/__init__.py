@@ -14,6 +14,8 @@ from pydantic import BaseModel
 
 from fastapi_viewsets._compat import model_to_dict
 from fastapi_viewsets._register import _RegisterMixin
+from fastapi_viewsets.nested import NestedConfig, _NestedMixin
+from fastapi_viewsets.soft_delete import SoftDeleteConfig
 from fastapi_viewsets.constants import ALLOWED_METHODS
 from fastapi_viewsets.db_conf import get_orm_adapter
 from fastapi_viewsets.orm.base import BaseORMAdapter
@@ -43,7 +45,7 @@ def _noop_dependency() -> None:
 butle = _noop_dependency
 
 
-class BaseViewset(_RegisterMixin, APIRouter):
+class BaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
     """Synchronous CRUD viewset.
 
     Provides ``LIST``, ``GET``, ``POST``, ``PUT``, ``PATCH`` and
@@ -62,6 +64,8 @@ class BaseViewset(_RegisterMixin, APIRouter):
         db_session: Optional[Callable[[], Any]] = None,
         response_model: Optional[Type[ResponseModelType]] = None,
         orm_adapter: Optional[BaseORMAdapter] = None,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        nested: Optional[NestedConfig] = None,
         **kwargs,
     ):
         """Initialize the viewset.
@@ -74,6 +78,8 @@ class BaseViewset(_RegisterMixin, APIRouter):
             response_model: Pydantic schema for request/response bodies.
             orm_adapter: ORM adapter; resolved from configuration when
                 omitted.
+            soft_delete: Optional deletion marker configuration; disabled by default.
+            nested: Optional parent lookup and child binding configuration.
             **kwargs: Forwarded to :class:`fastapi.APIRouter`.
         """
         super().__init__(*args, **kwargs)
@@ -83,6 +89,14 @@ class BaseViewset(_RegisterMixin, APIRouter):
         self.model: Optional[Type[ModelType]] = model
         self.db_session: Optional[Callable[[], Any]] = db_session
         self.orm_adapter: Optional[BaseORMAdapter] = orm_adapter or get_orm_adapter()
+        self.soft_delete = soft_delete
+        if soft_delete is not None:
+            if not isinstance(soft_delete, SoftDeleteConfig):
+                raise TypeError("soft_delete must be a SoftDeleteConfig or None")
+            if model is None:
+                raise ValueError("soft deletion requires a model")
+            self.orm_adapter.validate_soft_delete(model, soft_delete)
+        self._configure_nested(nested)
 
     # ------------------------------------------------------------------
     # CRUD handlers
@@ -130,6 +144,7 @@ class BaseViewset(_RegisterMixin, APIRouter):
             limit=limit,
             offset=offset,
             orm_adapter=self.orm_adapter,
+            **self._orm_options(),
             response_model=self.response_model,
             search=search,
             ordering=parse_ordering_param(
@@ -159,6 +174,7 @@ class BaseViewset(_RegisterMixin, APIRouter):
             db_session=self.db_session,
             id=id,
             orm_adapter=self.orm_adapter,
+            **self._orm_options(),
             response_model=self.response_model,
         )
 
@@ -173,6 +189,7 @@ class BaseViewset(_RegisterMixin, APIRouter):
             db_session=self.db_session,
             data=model_to_dict(item),
             orm_adapter=self.orm_adapter,
+            **self._orm_options(),
         )
 
     def update_element(
@@ -195,6 +212,7 @@ class BaseViewset(_RegisterMixin, APIRouter):
             model_to_dict(item, exclude_unset=partial),
             partial=partial,
             orm_adapter=self.orm_adapter,
+            **self._orm_options(),
         )
 
     def delete_element(
@@ -204,14 +222,33 @@ class BaseViewset(_RegisterMixin, APIRouter):
     ) -> Dict[str, Union[bool, str]]:
         """Delete an item by ID."""
         result = delete_element(
-            self.model, self.db_session, id, orm_adapter=self.orm_adapter
+            self.model, self.db_session, id, orm_adapter=self.orm_adapter,
+            **self._orm_options(),
         )
         if result is True:
             return {"status": True, "text": "successfully deleted"}
         return {"status": False, "text": "deletion failed"}
 
+    def restore_element(
+        self,
+        id: Union[int, str],
+        token: str = Depends(_noop_dependency),
+    ) -> Dict[str, Union[bool, str]]:
+        """Restore a soft-deleted item; active or missing IDs return 404."""
+        if self.soft_delete is None:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=404, detail="Soft deletion is not enabled")
+        result = self.orm_adapter.restore_element(
+            self.model, self.db_session, id, **self._orm_options()
+        )
+        return {
+            "status": result,
+            "text": "successfully restored" if result else "restoration failed",
+        }
+
 
 # Re-export async viewset for convenience.
 from fastapi_viewsets.async_base import AsyncBaseViewset  # noqa: E402
 
-__all__ = ["BaseViewset", "AsyncBaseViewset"]
+__all__ = ["BaseViewset", "AsyncBaseViewset", "SoftDeleteConfig", "NestedConfig"]

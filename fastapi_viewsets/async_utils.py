@@ -8,6 +8,7 @@ from fastapi_viewsets.orm.base import BaseORMAdapter
 from fastapi_viewsets.db_conf import get_orm_adapter
 from fastapi_viewsets.serializer_utils import get_select_related, get_prefetch_related
 from fastapi_viewsets.filtering import get_list_config
+from fastapi_viewsets.soft_delete import SoftDeleteConfig
 
 # Type variable for ORM models
 ModelType = TypeVar('ModelType')
@@ -63,6 +64,8 @@ async def get_list_queryset(
     search_fields: Optional[List[str]] = None,
     ordering: Optional[List[str]] = None,
     filters: Optional[Dict[str, Any]] = None,
+    soft_delete: Optional[SoftDeleteConfig] = None,
+    scope: Optional[Dict[str, Any]] = None,
 ) -> List[ModelType]:
     """Get list of elements from database with pagination support (async).
     
@@ -103,6 +106,8 @@ async def get_list_queryset(
         select_related=select_related or None,
         prefetch_related=prefetch_related or None,
         **_list_extra_kwargs(search, search_fields, ordering, filters),
+        **({"soft_delete": soft_delete} if soft_delete is not None else {}),
+        **({"scope": scope} if scope is not None else {}),
     )
 
 
@@ -114,6 +119,8 @@ async def get_element_by_id(
     response_model: Optional[Type[BaseModel]] = None,
     select_related: Optional[List[str]] = None,
     prefetch_related: Optional[List[str]] = None,
+    soft_delete: Optional[SoftDeleteConfig] = None,
+    scope: Optional[Dict[str, Any]] = None,
 ) -> ModelType:
     """Get single element by ID from database (async).
     
@@ -144,6 +151,8 @@ async def get_element_by_id(
         model, db_session, id,
         select_related=select_related or None,
         prefetch_related=prefetch_related or None,
+        **({"soft_delete": soft_delete} if soft_delete is not None else {}),
+        **({"scope": scope} if scope is not None else {}),
     )
 
 
@@ -151,7 +160,10 @@ async def create_element(
     model: Type[ModelType],
     db_session: Callable[[], Any],
     data: Dict[str, Any],
-    orm_adapter: Optional[BaseORMAdapter] = None
+    orm_adapter: Optional[BaseORMAdapter] = None,
+    *,
+    soft_delete: Optional[SoftDeleteConfig] = None,
+    scope: Optional[Dict[str, Any]] = None,
 ) -> ModelType:
     """Create new element in database (async).
     
@@ -170,7 +182,11 @@ async def create_element(
     if orm_adapter is None:
         orm_adapter = get_orm_adapter()
     
-    return await orm_adapter.create_element_async(model, db_session, data)
+    return await orm_adapter.create_element_async(
+        model, db_session, data,
+        **({"soft_delete": soft_delete} if soft_delete is not None else {}),
+        **({"scope": scope} if scope is not None else {}),
+    )
 
 
 async def update_element(
@@ -179,7 +195,10 @@ async def update_element(
     id: Union[int, str],
     data: Dict[str, Any],
     partial: bool = False,
-    orm_adapter: Optional[BaseORMAdapter] = None
+    orm_adapter: Optional[BaseORMAdapter] = None,
+    *,
+    soft_delete: Optional[SoftDeleteConfig] = None,
+    scope: Optional[Dict[str, Any]] = None,
 ) -> ModelType:
     """Update element in database (async).
     
@@ -200,14 +219,21 @@ async def update_element(
     if orm_adapter is None:
         orm_adapter = get_orm_adapter()
     
-    return await orm_adapter.update_element_async(model, db_session, id, data, partial)
+    return await orm_adapter.update_element_async(
+        model, db_session, id, data, partial,
+        **({"soft_delete": soft_delete} if soft_delete is not None else {}),
+        **({"scope": scope} if scope is not None else {}),
+    )
 
 
 async def delete_element(
     model: Type[ModelType],
     db_session: Callable[[], Any],
     id: Union[int, str],
-    orm_adapter: Optional[BaseORMAdapter] = None
+    orm_adapter: Optional[BaseORMAdapter] = None,
+    *,
+    soft_delete: Optional[SoftDeleteConfig] = None,
+    scope: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """Delete element from database by ID (async).
     
@@ -226,5 +252,9 @@ async def delete_element(
     if orm_adapter is None:
         orm_adapter = get_orm_adapter()
     
-    return await orm_adapter.delete_element_async(model, db_session, id)
+    return await orm_adapter.delete_element_async(
+        model, db_session, id,
+        **({"soft_delete": soft_delete} if soft_delete is not None else {}),
+        **({"scope": scope} if scope is not None else {}),
+    )
 

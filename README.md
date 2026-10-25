@@ -720,6 +720,54 @@ class ItemsWithStats(BaseViewset):
 
 ## What is new
 
+### v1.7.0
+
+Built-in nested resources for SQLAlchemy (sync/async), Tortoise and Peewee:
+
+```python
+from fastapi_viewsets import BaseViewset, NestedConfig
+
+comments = BaseViewset(
+    endpoint="/posts/{post_id}/comments", model=Comment,
+    response_model=CommentSchema, db_session=get_session,
+    nested=NestedConfig(parent_model=Post, foreign_key="post_id"),
+)
+comments.register()
+```
+
+The parent is resolved automatically. Child CRUD and restoration are restricted
+to that parent; body/query values cannot change the binding. Overrides can access
+the parent with `self.get_parent()` and customize permissions through
+`resolve_parent(request)`. Existing viewsets remain unchanged without `nested`.
+
+See the [nested resources guide](docs/nested-resources.md) for a full example,
+aliases, soft-delete integration, and custom routes.
+
+#### Soft delete and restore (included in v1.7.0)
+
+Opt-in soft deletion with automatic filtering and restoration for SQLAlchemy
+(sync/async), Tortoise and Peewee:
+
+```python
+from fastapi_viewsets import BaseViewset, SoftDeleteConfig
+
+# Item must have a boolean is_deleted column, defaulting to False.
+items = BaseViewset(
+    endpoint="/items", model=Item, response_model=ItemSchema,
+    db_session=get_session, soft_delete=SoftDeleteConfig(),
+)
+items.register()
+```
+
+`DELETE /items/{id}` marks the record deleted. LIST/GET hide deleted records,
+and PUT/PATCH return 404 for them. `POST /items/{id}/restore` restores a deleted
+record and inherits DELETE's OAuth2 protection. Timestamp markers are supported
+with `SoftDeleteConfig(field="deleted_at", mode="timestamp")` and a nullable
+datetime column. Existing viewsets keep physical deletion unless configured.
+
+See the [soft-delete guide](docs/soft-delete.md) for migrations, permissions,
+and database constraint behavior.
+
 ### v1.5.2
 
 Bugfix release for the CRUD write paths (see

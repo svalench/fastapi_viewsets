@@ -3,6 +3,8 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any, Tuple, Union, Type, TypeVar, List, Callable
 
+from fastapi_viewsets.soft_delete import SoftDeleteConfig
+
 # Type variable for ORM models
 ModelType = TypeVar('ModelType')
 
@@ -15,6 +17,62 @@ class BaseORMAdapter(ABC):
     should have its own adapter implementation.
     """
     
+    supports_nested = False
+
+    def validate_nested_parent(self, model, field, parent_model):
+        """Validate a declared ORM relation, when relation metadata is available."""
+
+    def get_nested_field(self, model, field):
+        """Return a scoped field's canonical name and accepted data aliases."""
+        columns = self.get_model_columns(model)
+        if field not in columns or columns[field].get("primary_key"):
+            raise ValueError("nested foreign key must be an existing non-primary-key field")
+        return field, (field,)
+
+    def get_nested_parent_type(self, model):
+        """Infer a supported parent ID type for request validation and OpenAPI."""
+        from uuid import UUID
+
+        column = self.get_model_columns(model).get("id", {})
+        if not column.get("primary_key"):
+            raise ValueError("parent model must expose its primary key as 'id'")
+        kind = column["type"].lower()
+        return int if "int" in kind or "autofield" in kind else UUID if "uuid" in kind else str
+
+    def _scoped_data(self, model, data, scope, *, create=False):
+        result = dict(data)
+        for field, value in (scope or {}).items():
+            canonical, aliases = self.get_nested_field(model, field)
+            result = {key: item for key, item in result.items() if key not in aliases}
+            if create:
+                result[canonical] = value
+        return result
+
+    supports_soft_delete = False
+
+    def validate_soft_delete(self, model: Type, config: SoftDeleteConfig) -> None:
+        """Validate opt-in configuration without changing legacy adapters."""
+        if not self.supports_soft_delete:
+            raise ValueError("This ORM adapter does not support soft deletion")
+        columns = self.get_model_columns(model)
+        column = columns.get(config.field)
+        if column is None or column.get("primary_key"):
+            raise ValueError("soft-delete field must be an existing non-primary-key column")
+        kind = column.get("type", "").lower()
+        if config.mode == "boolean" and "bool" not in kind:
+            raise ValueError("boolean soft deletion requires a boolean column")
+        if config.mode == "timestamp":
+            if not any(name in kind for name in ("datetime", "timestamp")) or not column.get("nullable"):
+                raise ValueError("timestamp soft deletion requires a nullable datetime column")
+
+    def restore_element(self, model, db_session, id, *, soft_delete: SoftDeleteConfig, scope=None) -> bool:
+        """Restore a deleted row; optional for third-party adapters."""
+        raise NotImplementedError("This ORM adapter does not support restoration")
+
+    async def restore_element_async(self, model, db_session, id, *, soft_delete: SoftDeleteConfig, scope=None) -> bool:
+        """Restore a deleted row using an async-capable adapter."""
+        raise NotImplementedError("This ORM adapter does not support async restoration")
+
     @abstractmethod
     def get_session(self) -> Any:
         """Get synchronous database session.

@@ -26,3 +26,13 @@ class UniqueNameTortoiseModel(Model):
 
     id = fields.IntField(pk=True)
     name = fields.CharField(max_length=50, unique=True)
+
+
+class SoftDeleteItem(Model):
+    id = fields.IntField(pk=True)
+    name = fields.CharField(max_length=50)
+    is_deleted = fields.BooleanField(default=False)
+    deleted_at = fields.DatetimeField(null=True)
+
+    class Meta:
+        table = "soft_delete_items"

@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from starlette import status
 
 from fastapi_viewsets.orm.base import BaseORMAdapter, ModelType
+from fastapi_viewsets.soft_delete import SoftDeleteConfig
 
 try:
     from tortoise import Tortoise
@@ -19,6 +20,9 @@ except ImportError:
 class TortoiseAdapter(BaseORMAdapter):
     """Tortoise ORM adapter implementation."""
     
+    supports_soft_delete = True
+    supports_nested = True
+
     def __init__(
         self,
         database_url: str,
@@ -116,6 +120,9 @@ class TortoiseAdapter(BaseORMAdapter):
         search_fields: Optional[List[str]] = None,
         ordering: Optional[List[str]] = None,
         filters: Optional[Dict[str, Tuple[str, Any]]] = None,
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> List[ModelType]:
         """Get list of elements from database with pagination support (asynchronous)."""
         await self._ensure_initialized()
@@ -124,6 +131,10 @@ class TortoiseAdapter(BaseORMAdapter):
             return []
         
         queryset = model.all()
+        if scope is not None:
+            queryset = queryset.filter(**scope)
+        if soft_delete is not None:
+            queryset = queryset.filter(**self._soft_delete_filters(soft_delete))
         
         if select_related:
             queryset = queryset.prefetch_related(*select_related)
@@ -182,17 +193,27 @@ class TortoiseAdapter(BaseORMAdapter):
         id: Union[int, str],
         select_related: Optional[List[str]] = None,
         prefetch_related: Optional[List[str]] = None,
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> ModelType:
         """Get single element by ID from database (asynchronous)."""
         await self._ensure_initialized()
         
         try:
             queryset = model.filter(id=id)
+            if scope is not None:
+                queryset = queryset.filter(**scope)
+            if soft_delete is not None:
+                queryset = queryset.filter(**self._soft_delete_filters(soft_delete))
             if select_related:
                 queryset = queryset.prefetch_related(*select_related)
             if prefetch_related:
                 queryset = queryset.prefetch_related(*prefetch_related)
-            return await queryset.first()
+            instance = await queryset.first()
+            if (soft_delete is not None or scope is not None) and instance is None:
+                raise HTTPException(status_code=404, detail="Element not found")
+            return instance
         except DoesNotExist:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -212,9 +233,16 @@ class TortoiseAdapter(BaseORMAdapter):
         self,
         model: Type[ModelType],
         db_session: Callable[[], Any],
-        data: Dict[str, Any]
+        data: Dict[str, Any],
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> ModelType:
         """Create new element in database (asynchronous)."""
+        if scope is not None:
+            data = self._scoped_data(model, data, scope, create=True)
+        if soft_delete is not None:
+            data = soft_delete.create_data(data)
         await self._ensure_initialized()
         
         try:
@@ -226,10 +254,15 @@ class TortoiseAdapter(BaseORMAdapter):
             # Validate required fields
             required_fields = set()
             for field_name, field in model._meta.fields_map.items():
-                if field.required and field_name != 'id' and not field.generated:
+                if (field.required and field_name != 'id' and not field.generated
+                        and getattr(field, "has_db_field", True)):
                     required_fields.add(field_name)
             
             provided_fields = {k for k, v in data.items() if v is not None}
+            if scope is not None:
+                for field in scope:
+                    _, aliases = self.get_nested_field(model, field)
+                    provided_fields.update(aliases)
             missing_fields = required_fields - provided_fields
             if missing_fields:
                 raise HTTPException(
@@ -267,13 +300,25 @@ class TortoiseAdapter(BaseORMAdapter):
         db_session: Callable[[], Any],
         id: Union[int, str],
         data: Dict[str, Any],
-        partial: bool = False
+        partial: bool = False,
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> ModelType:
         """Update element in database (asynchronous)."""
         await self._ensure_initialized()
         
         try:
-            instance = await model.get(id=id)
+            if soft_delete is not None or scope is not None:
+                query = model.filter(**(scope or {}))
+                if soft_delete is not None:
+                    query = query.filter(**self._soft_delete_filters(soft_delete))
+                    data = soft_delete.update_data(data)
+                if scope is not None:
+                    data = self._scoped_data(model, data, scope)
+                instance = await query.get(id=id)
+            else:
+                instance = await model.get(id=id)
         except DoesNotExist:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -292,7 +337,15 @@ class TortoiseAdapter(BaseORMAdapter):
             setattr(instance, key, value)
         
         try:
-            await instance.save()
+            if soft_delete is not None or scope is not None:
+                query = model.filter(id=id, **(scope or {}))
+                if soft_delete is not None:
+                    query = query.filter(**self._soft_delete_filters(soft_delete))
+                changed = await query.update(**data)
+                if not changed:
+                    raise HTTPException(status_code=404, detail="Element not found")
+            else:
+                await instance.save()
         except TortoiseIntegrityError as exc:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -315,13 +368,21 @@ class TortoiseAdapter(BaseORMAdapter):
         self,
         model: Type[ModelType],
         db_session: Callable[[], Any],
-        id: Union[int, str]
+        id: Union[int, str],
+        *,
+        soft_delete: Optional[SoftDeleteConfig] = None,
+        scope: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Delete element from database by ID (asynchronous)."""
+        if soft_delete is not None:
+            return await self._change_deleted_state(model, id, soft_delete, restore=False, scope=scope)
         await self._ensure_initialized()
         
         try:
-            instance = await model.get(id=id)
+            if scope is not None:
+                instance = await model.filter(**scope).get(id=id)
+            else:
+                instance = await model.get(id=id)
             await instance.delete()
             return True
         except DoesNotExist:
@@ -355,3 +416,57 @@ class TortoiseAdapter(BaseORMAdapter):
             }
         return columns
 
+    @staticmethod
+    def _soft_delete_filters(config, *, deleted=False):
+        if config.mode == "timestamp":
+            return {f"{config.field}__isnull": not deleted}
+        return {config.field: deleted}
+
+    async def _change_deleted_state(self, model, id, config, *, restore, scope=None):
+        await self._ensure_initialized()
+        try:
+            value = config.active_value if restore else config.deleted_value()
+            query = model.filter(id=id, **(scope or {})).filter(**self._soft_delete_filters(config, deleted=restore))
+            changed = await query.update(
+                **{config.field: value}
+            )
+            if not changed:
+                raise HTTPException(status_code=404, detail="Element not found")
+            return True
+        except TortoiseIntegrityError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail="Integrity error: a database constraint was violated",
+            ) from exc
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="Database error") from exc
+
+    async def restore_element_async(self, model, db_session, id, *, soft_delete: SoftDeleteConfig, scope=None) -> bool:
+        return await self._change_deleted_state(model, id, soft_delete, restore=True, scope=scope)
+
+    def get_nested_field(self, model, field):
+        from tortoise.fields.relational import ForeignKeyFieldInstance
+
+        for name, info in model._meta.fields_map.items():
+            if isinstance(info, ForeignKeyFieldInstance):
+                canonical = f"{name}_id"
+                aliases = tuple({name, canonical, info.source_field} - {None})
+                if field in aliases:
+                    if info.pk:
+                        break
+                    return canonical, aliases
+        return super().get_nested_field(model, field)
+
+    def validate_nested_parent(self, model, field, parent_model):
+        from tortoise.fields.relational import ForeignKeyFieldInstance
+
+        for name, info in model._meta.fields_map.items():
+            if isinstance(info, ForeignKeyFieldInstance) and field == f"{name}_id":
+                related = info.related_model
+                if ((related is not None and related is not parent_model)
+                        or (related is None and info.model_name.rsplit(".", 1)[-1] != parent_model.__name__)):
+                    raise ValueError("nested foreign key references a different parent model")
+                if info.to_field not in (None, "id"):
+                    raise ValueError("nested foreign key must reference the parent's id")

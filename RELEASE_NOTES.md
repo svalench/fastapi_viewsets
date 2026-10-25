@@ -1,5 +1,35 @@
 # Release Notes
 
+## Version 1.7.0
+
+- Add opt-in `NestedConfig` for parent lookup and scoped child CRUD across all
+  built-in ORM adapters, including nested restoration with soft deletion.
+- Bind the URL's parent key before request validation and enforce it in writes;
+  preserve field aliases, validators, pagination, and ORM deletion cascades.
+- Add request-local `get_parent()` context, a `resolve_parent(request)` permission
+  hook, typed parent IDs, and OpenAPI path/body documentation.
+- Exclude virtual/backward Tortoise relations from required create fields.
+- Keep existing viewsets/custom adapters unchanged when nesting is disabled.
+
+Details: [RELEASE_1.7.0.md](RELEASE_1.7.0.md).
+
+### Soft delete and restore (included in 1.7.0)
+
+- Add optional `SoftDeleteConfig` to sync and async viewsets, supporting boolean
+  and timestamp deletion markers on existing model columns.
+- Automatically filter deleted records from LIST and GET, before pagination;
+  ordinary PUT/PATCH/DELETE on deleted records return 404.
+- Register `POST /{id}/restore` alongside a configured DELETE, with inherited
+  DELETE OAuth2 protection and optional explicit `RESTORE` registration.
+- Implement database-level filtering and conditional deletion/restoration for
+  SQLAlchemy (sync/async), Tortoise and Peewee. Restore conflicts return safe 409s.
+- Keep physical deletion, existing method signatures and custom adapter usage
+  working when soft deletion is not configured. No automatic schema migrations.
+- Preserve the annotation namespace on wrapped handlers, fixing OAuth2 route
+  registration with the minimum supported FastAPI 0.110.
+
+Implementation notes: [RELEASE_1.6.0.md](RELEASE_1.6.0.md).
+
 ## Version 1.5.3
 
 Security note: Python 3.9 is functionally tested but its upstream dependencies have known advisories whose fixes require newer Python. Use Python 3.11+ and current dependencies for security-sensitive deployments; see README.

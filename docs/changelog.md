@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.7.0
+
+- Optional nested resources with automatic parent lookup, URL-managed foreign
+  keys, scoped CRUD/restoration, and request-local parent context across all ORMs.
+- Custom permission hooks, typed parent path parameters, and body schema support.
+- Preserve physical deletion lifecycle/cascades and existing unscoped behavior.
+- Fix required-field handling for virtual/backward Tortoise relations.
+
+See [Nested Resources](nested-resources.md).
+
+### Soft delete and restore (included in v1.7.0)
+
+- Optional soft deletion with boolean or timestamp markers across SQLAlchemy
+  (sync/async), Tortoise and Peewee.
+- Automatic filtering for LIST/GET and 404s for ordinary writes to deleted rows.
+- Restore endpoint with DELETE's OAuth2 protection and safe constraint conflicts.
+- Existing viewsets retain physical deletion by default.
+
+See [Soft Delete & Restore](soft-delete.md).
+
 ## v1.3.0
 
 - **Declarative eager loading** via `RelatedConfig` inside Pydantic schemas.
