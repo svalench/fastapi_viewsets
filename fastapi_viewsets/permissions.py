@@ -44,6 +44,19 @@ def _user_pk(user: Any) -> Any:
     return getattr(user, "pk", None)
 
 
+def _field_value_for_owner(obj: Any, field: str) -> Any:
+    """Сравниваем owner по id, если ORM отдал связанный объект (Peewee ForeignKeyField)."""
+    value = getattr(obj, field, None)
+    if value is None:
+        return None
+    if isinstance(value, (int, str, bytes, bool, float)):
+        return value
+    related_id = _user_pk(value)
+    if related_id is not None:
+        return related_id
+    return value
+
+
 def _is_privileged(user: Any) -> bool:
     if user is None:
         return False
@@ -92,7 +105,7 @@ class IsOwner(BasePermission):
         if _is_privileged(user):
             return True
         field = self._owner_field(view)
-        return getattr(obj, field, None) == _user_pk(user)
+        return _field_value_for_owner(obj, field) == _user_pk(user)
 
     def get_scope(self, request: Request, view: Any) -> Dict[str, Any]:
         user = _current_user(request)

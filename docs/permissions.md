@@ -21,7 +21,7 @@ Each class implements:
 - `has_object_permission(request, view, action, obj)` — gate after a row is loaded
 - `get_scope(request, view)` — extra equality filters merged into ORM queries
 
-Custom classes can override `filter_queryset()` later for OR conditions or joins.
+`filter_queryset()` is a reserved extension point for custom permissions (OR conditions, joins). Generated LIST handlers in v1.8 call `get_scope` only; overriding `filter_queryset()` does not change LIST until you call it from your own code or a future release wires it in.
 
 ## 404 vs 403
 
