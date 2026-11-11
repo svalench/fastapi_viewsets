@@ -520,7 +520,8 @@ async def test_async_viewset_permission_handlers(db_session_factory, monkeypatch
     assert await viewset.get_element(1, request=request) is row
     assert await viewset.create_element(OwnedItemSchema(title="async"), request=request) is row
     assert await viewset.update_element(1, OwnedItemSchema(title="async"), request=request) is row
-    assert await viewset.delete_element(1, request=request)["status"] is True
+    deleted = await viewset.delete_element(1, request=request)
+    assert deleted["status"] is True
 
 
 def test_is_owner_scope_uses_pk_attribute():
