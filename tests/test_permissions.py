@@ -7,6 +7,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI, Header, Request
 from fastapi.testclient import TestClient
+from typing import Optional
+
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String
 
@@ -57,9 +59,9 @@ class IntOwnerItem(TestBase):
 class OwnedItemSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int | None = None
+    id: Optional[int] = None
     title: str
-    user_id: int | None = None
+    user_id: Optional[int] = None
 
 
 USERS = {
@@ -69,7 +71,9 @@ USERS = {
 }
 
 
-def auth_dependency(request: Request, x_user_id: int | None = Header(default=None, alias="X-User-Id")):
+def auth_dependency(
+    request: Request, x_user_id: Optional[int] = Header(default=None, alias="X-User-Id")
+):
     user = USERS.get(x_user_id) if x_user_id is not None else None
     request.state.user = user
     return user
