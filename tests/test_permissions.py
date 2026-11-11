@@ -666,6 +666,100 @@ async def test_async_restore_with_permissions(db_session_factory):
     assert result["status"] is True
 
 
+def test_base_adapter_discover_user_foreign_keys_default():
+    from fastapi_viewsets.orm.base import BaseORMAdapter
+
+    assert BaseORMAdapter.discover_user_foreign_keys(object(), OwnedItem, Account) == []
+
+
+def test_permission_helper_branches():
+    from fastapi_viewsets.permissions import (
+        IsOwner,
+        _field_value_for_owner,
+        _is_privileged,
+        _user_pk,
+    )
+
+    assert _user_pk(None) is None
+    assert _field_value_for_owner(SimpleNamespace(), "missing") is None
+    assert _field_value_for_owner(SimpleNamespace(user_id=2), "user_id") == 2
+    assert (
+        _field_value_for_owner(SimpleNamespace(owner=SimpleNamespace(id=9)), "owner") == 9
+    )
+    orphan = SimpleNamespace(name="no-pk")
+    assert _field_value_for_owner(SimpleNamespace(holder=orphan), "holder") is orphan
+    assert _is_privileged(None) is False
+    assert IsOwner(field="editor_id")._owner_field(SimpleNamespace()) == "editor_id"
+
+
+def test_sqlalchemy_discover_user_foreign_keys_relationship_only(monkeypatch):
+    from unittest.mock import MagicMock
+
+    adapter = get_orm_adapter()
+    rel = MagicMock()
+    rel.mapper.class_ = Account
+    column = MagicMock()
+    column.key = "linked_user_id"
+    rel.local_columns = [column]
+    mapper = MagicMock()
+    mapper.column_attrs = []
+    mapper.relationships = [rel]
+    monkeypatch.setattr("sqlalchemy.inspect", lambda model: mapper)
+    assert adapter.discover_user_foreign_keys(OwnedItem, Account) == ["linked_user_id"]
+
+
+def test_tortoise_discover_user_foreign_keys():
+    pytest.importorskip("tortoise")
+    from fastapi_viewsets.orm.tortoise_adapter import TortoiseAdapter
+
+    from tests.permissions_tortoise_models import PermAccount, PermOwnedItem
+
+    adapter = TortoiseAdapter(
+        database_url="sqlite://:memory:",
+        models=["tests.permissions_tortoise_models"],
+    )
+    assert adapter.discover_user_foreign_keys(PermOwnedItem, PermAccount) == ["user_id"]
+
+
+def test_peewee_validate_nested_parent_direct_field(monkeypatch):
+    peewee = pytest.importorskip("peewee")
+    from fastapi_viewsets.orm.peewee_adapter import PeeweeAdapter
+
+    pw_db = peewee.SqliteDatabase(":memory:")
+
+    class Folder(peewee.Model):
+        id = peewee.AutoField()
+
+        class Meta:
+            database = pw_db
+
+    class User(peewee.Model):
+        id = peewee.AutoField()
+
+        class Meta:
+            database = pw_db
+
+    class Document(peewee.Model):
+        id = peewee.AutoField()
+        folder = peewee.ForeignKeyField(Folder, backref="docs")
+
+        class Meta:
+            database = pw_db
+
+    pw_db.create_tables([Folder, User, Document])
+    adapter = PeeweeAdapter(database_url="sqlite:///:memory:", database=pw_db)
+    adapter.validate_nested_parent(Document, "folder", Folder)
+    with pytest.raises(ValueError, match="different parent"):
+        adapter.validate_nested_parent(Document, "folder_id", User)
+
+    def phantom_nested(_model, _field):
+        return "ghost_id", ("ghost_id",)
+
+    monkeypatch.setattr(adapter, "get_nested_field", phantom_nested)
+    with pytest.raises(ValueError, match="non-primary-key field"):
+        adapter.validate_nested_parent(Document, "ghost_id", Folder)
+
+
 def test_peewee_discover_user_foreign_keys():
     peewee = pytest.importorskip("peewee")
     from fastapi_viewsets.orm.peewee_adapter import PeeweeAdapter
