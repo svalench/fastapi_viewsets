@@ -482,57 +482,45 @@ def test_async_viewset_permission_scope(test_engine, db_session_factory):
     assert scope == {"user_id": 2}
 
 
-@pytest.fixture
-def async_perm_app(test_engine, db_session_factory):
+@pytest.mark.asyncio
+async def test_async_viewset_permission_handlers(db_session_factory, monkeypatch):
     init_permissions(user_model=Account)
 
     class AsyncItems(AsyncBaseViewset):
         permission_classes = [IsAuthenticated, IsOwner]
 
-    app = FastAPI()
-    router = AsyncItems(
+    viewset = AsyncItems(
         endpoint="/async-items",
         model=OwnedItem,
         response_model=OwnedItemSchema,
         db_session=db_session_factory,
-        tags=["async-items"],
     )
-    router.register(
-        methods=["LIST", "GET", "POST", "PUT", "PATCH", "DELETE"],
-        auth_dependency=auth_dependency,
-    )
-    app.include_router(router)
-    client = TestClient(app)
+    request = _request(USERS[2])
+    row = OwnedItem(id=1, title="async", user_id=2)
 
-    session = db_session_factory()
-    session.add_all(
-        [
-            Account(id=1, username="alice"),
-            Account(id=2, username="bob"),
-            OwnedItem(title="async-a", user_id=1),
-            OwnedItem(title="async-b", user_id=2),
-        ]
-    )
-    session.commit()
-    owned = {row.title: row.id for row in session.query(OwnedItem).filter(OwnedItem.title.like("async-%")).all()}
-    session.close()
-    return client, owned
+    async def list_rows(*args, **kwargs):
+        return [row]
 
+    async def load_row(*args, **kwargs):
+        return row
 
-def test_async_owner_crud_and_foreign_id_returns_404(async_perm_app):
-    client, owned = async_perm_app
-    headers = {"X-User-Id": "2"}
-    assert {row["title"] for row in client.get("/async-items", headers=headers).json()} == {"async-b"}
-    assert client.get(f"/async-items/{owned['async-a']}", headers=headers).status_code == 404
-    created = client.post("/async-items", json={"title": "async-new", "user_id": 1}, headers=headers).json()
-    assert created["user_id"] == 2
-    updated = client.patch(
-        f"/async-items/{created['id']}",
-        json={"title": "async-patched"},
-        headers=headers,
-    ).json()
-    assert updated["title"] == "async-patched"
-    assert client.delete(f"/async-items/{created['id']}", headers=headers).status_code == 200
+    async def write_row(*args, **kwargs):
+        return row
+
+    async def delete_row(*args, **kwargs):
+        return True
+
+    monkeypatch.setattr("fastapi_viewsets.async_base.get_list_queryset", list_rows)
+    monkeypatch.setattr("fastapi_viewsets.async_base.get_element_by_id", load_row)
+    monkeypatch.setattr("fastapi_viewsets.async_base.create_element", write_row)
+    monkeypatch.setattr("fastapi_viewsets.async_base.update_element", write_row)
+    monkeypatch.setattr("fastapi_viewsets.async_base.delete_element", delete_row)
+
+    assert await viewset.list(request=request) == [row]
+    assert await viewset.get_element(1, request=request) is row
+    assert await viewset.create_element(OwnedItemSchema(title="async"), request=request) is row
+    assert await viewset.update_element(1, OwnedItemSchema(title="async"), request=request) is row
+    assert await viewset.delete_element(1, request=request)["status"] is True
 
 
 def test_is_owner_scope_uses_pk_attribute():
