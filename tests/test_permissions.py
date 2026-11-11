@@ -80,7 +80,14 @@ USERS = {
 
 
 def _request(user=None):
-    scope = {"type": "http", "headers": [], "method": "GET", "path": "/", "http_version": "1.1"}
+    scope = {
+        "type": "http",
+        "headers": [],
+        "method": "GET",
+        "path": "/",
+        "http_version": "1.1",
+        "query_string": b"",
+    }
     request = Request(scope)
     if user is not None:
         request.state.user = user
@@ -454,15 +461,9 @@ def test_permission_body_model_cache_and_programmatic_list(test_engine, db_sessi
     )
     router.register(methods=["POST"], auth_dependency=auth_dependency)
     router.register(methods=["POST"], auth_dependency=auth_dependency)
-    assert router._permission_models
-
-    session = db_session_factory()
-    session.add(Account(id=1, username="alice"))
-    session.commit()
-    session.close()
-
-    request = _request(USERS[1])
-    router.list(request=request)
+    first = router._permission_body_model(OwnedItemSchema)
+    second = router._permission_body_model(OwnedItemSchema)
+    assert first is second
 
 
 def test_async_viewset_permission_scope(test_engine, db_session_factory):

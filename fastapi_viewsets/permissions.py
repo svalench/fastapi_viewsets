@@ -117,7 +117,14 @@ class _PermissionsMixin:
         if field_override is None:
             field_override = getattr(type(self), "owner_field", None)
 
-        self._permissions: List[BasePermission] = [cls() for cls in classes]
+        self._permissions: List[BasePermission] = []
+        for entry in classes:
+            if isinstance(entry, type) and issubclass(entry, BasePermission):
+                self._permissions.append(entry())
+            elif isinstance(entry, BasePermission):
+                self._permissions.append(entry)
+            else:
+                self._permissions.append(entry())
         self._resolved_owner_field: Optional[str] = None
         self._owner_aliases: tuple[str, ...] = ()
         self._permission_models: Dict[type[BaseModel], type[BaseModel]] = {}
