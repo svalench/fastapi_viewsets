@@ -26,6 +26,7 @@ from fastapi_viewsets import (
 )
 from fastapi_viewsets.db_conf import get_orm_adapter
 import fastapi_viewsets.permissions_state as permissions_state
+from fastapi_viewsets.permissions_state import get_user_model, set_user_model
 from tests.conftest import TestBase, db_session_factory
 
 
@@ -570,3 +571,148 @@ def test_permission_strip_owner_validator_skips_non_dict(test_engine, db_session
     row = OwnedItem(title="from-orm", user_id=99)
     validated = patched.model_validate(row, from_attributes=True)
     assert validated.title == "from-orm"
+
+
+def test_permissions_state_roundtrip():
+    previous = get_user_model()
+    set_user_model(Account)
+    assert get_user_model() is Account
+    set_user_model(previous)
+
+
+def test_callable_permission_factory_entry(test_engine, db_session_factory):
+    class ItemsViewset(BaseViewset):
+        permission_classes = [lambda: IsAuthenticated()]  # type: ignore[list-item]
+
+    router = ItemsViewset(
+        endpoint="/items",
+        model=OwnedItem,
+        response_model=OwnedItemSchema,
+        db_session=db_session_factory,
+    )
+    assert router.uses_permissions()
+    assert client_get_forbidden(router) == 403
+
+
+def client_get_forbidden(router):
+    app = FastAPI()
+    router.register(methods=["LIST"], auth_dependency=auth_dependency)
+    app.include_router(router)
+    return TestClient(app).get("/items").status_code
+
+
+def test_restore_requires_soft_delete(db_session_factory):
+    init_permissions(user_model=Account)
+
+    class ItemsViewset(BaseViewset):
+        permission_classes = [IsAuthenticated, IsOwner]
+
+    router = ItemsViewset(
+        endpoint="/items",
+        model=OwnedItem,
+        response_model=OwnedItemSchema,
+        db_session=db_session_factory,
+    )
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException, match="Soft deletion"):
+        router.restore_element(1, request=_request(USERS[1]))
+
+
+def test_delete_failure_response(db_session_factory, monkeypatch):
+    init_permissions(user_model=Account)
+
+    class ItemsViewset(BaseViewset):
+        permission_classes = [IsAuthenticated, IsOwner]
+
+    router = ItemsViewset(
+        endpoint="/items",
+        model=OwnedItem,
+        response_model=OwnedItemSchema,
+        db_session=db_session_factory,
+    )
+
+    def load_item(*args, **kwargs):
+        return OwnedItem(id=1, title="x", user_id=1)
+
+    monkeypatch.setattr("fastapi_viewsets.get_element_by_id", load_item)
+    monkeypatch.setattr("fastapi_viewsets.delete_element", lambda *args, **kwargs: False)
+    assert router.delete_element(1, request=_request(USERS[1])) == {
+        "status": False,
+        "text": "deletion failed",
+    }
+
+
+@pytest.mark.asyncio
+async def test_async_restore_with_permissions(db_session_factory):
+    init_permissions(user_model=Account)
+
+    class AsyncItems(AsyncBaseViewset):
+        permission_classes = [IsAuthenticated, IsOwner]
+
+    viewset = AsyncItems(
+        endpoint="/async-items",
+        model=OwnedItem,
+        response_model=OwnedItemSchema,
+        db_session=db_session_factory,
+        soft_delete=SoftDeleteConfig(field="is_deleted"),
+    )
+
+    async def restore_async(*args, **kwargs):
+        return True
+
+    viewset.orm_adapter.restore_element_async = restore_async  # type: ignore[method-assign]
+    result = await viewset.restore_element(1, request=_request(USERS[1]))
+    assert result["status"] is True
+
+
+def test_peewee_discover_user_foreign_keys():
+    peewee = pytest.importorskip("peewee")
+    from fastapi_viewsets.orm.peewee_adapter import PeeweeAdapter
+
+    database = peewee.SqliteDatabase(":memory:")
+
+    class User(peewee.Model):
+        id = peewee.AutoField()
+        username = peewee.TextField()
+
+        class Meta:
+            database = database
+
+    class Note(peewee.Model):
+        id = peewee.AutoField()
+        owner = peewee.ForeignKeyField(User, backref="notes")
+
+        class Meta:
+            database = database
+
+    database.create_tables([User, Note])
+    adapter = PeeweeAdapter(database_url="sqlite:///:memory:", database=database)
+    keys = adapter.discover_user_foreign_keys(Note, User)
+    assert "owner" in keys or "owner_id" in keys
+
+
+@pytest.mark.asyncio
+async def test_async_delete_failure_response(db_session_factory, monkeypatch):
+    init_permissions(user_model=Account)
+
+    class AsyncItems(AsyncBaseViewset):
+        permission_classes = [IsAuthenticated, IsOwner]
+
+    viewset = AsyncItems(
+        endpoint="/async-items",
+        model=OwnedItem,
+        response_model=OwnedItemSchema,
+        db_session=db_session_factory,
+    )
+
+    async def load_item(*args, **kwargs):
+        return OwnedItem(id=1, title="x", user_id=1)
+
+    async def fail_delete(*args, **kwargs):
+        return False
+
+    monkeypatch.setattr("fastapi_viewsets.async_base.get_element_by_id", load_item)
+    monkeypatch.setattr("fastapi_viewsets.async_base.delete_element", fail_delete)
+    result = await viewset.delete_element(1, request=_request(USERS[1]))
+    assert result["status"] is False
