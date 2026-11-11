@@ -480,3 +480,104 @@ def test_async_viewset_permission_scope(test_engine, db_session_factory):
     )
     scope = viewset._permission_scope(_request(USERS[2]))
     assert scope == {"user_id": 2}
+
+
+@pytest.fixture
+def async_perm_app(test_engine, db_session_factory):
+    init_permissions(user_model=Account)
+
+    class AsyncItems(AsyncBaseViewset):
+        permission_classes = [IsAuthenticated, IsOwner]
+
+    app = FastAPI()
+    router = AsyncItems(
+        endpoint="/async-items",
+        model=OwnedItem,
+        response_model=OwnedItemSchema,
+        db_session=db_session_factory,
+        tags=["async-items"],
+    )
+    router.register(
+        methods=["LIST", "GET", "POST", "PUT", "PATCH", "DELETE"],
+        auth_dependency=auth_dependency,
+    )
+    app.include_router(router)
+    client = TestClient(app)
+
+    session = db_session_factory()
+    session.add_all(
+        [
+            Account(id=1, username="alice"),
+            Account(id=2, username="bob"),
+            OwnedItem(title="async-a", user_id=1),
+            OwnedItem(title="async-b", user_id=2),
+        ]
+    )
+    session.commit()
+    owned = {row.title: row.id for row in session.query(OwnedItem).filter(OwnedItem.title.like("async-%")).all()}
+    session.close()
+    return client, owned
+
+
+def test_async_owner_crud_and_foreign_id_returns_404(async_perm_app):
+    client, owned = async_perm_app
+    headers = {"X-User-Id": "2"}
+    assert {row["title"] for row in client.get("/async-items", headers=headers).json()} == {"async-b"}
+    assert client.get(f"/async-items/{owned['async-a']}", headers=headers).status_code == 404
+    created = client.post("/async-items", json={"title": "async-new", "user_id": 1}, headers=headers).json()
+    assert created["user_id"] == 2
+    updated = client.patch(
+        f"/async-items/{created['id']}",
+        json={"title": "async-patched"},
+        headers=headers,
+    ).json()
+    assert updated["title"] == "async-patched"
+    assert client.delete(f"/async-items/{created['id']}", headers=headers).status_code == 200
+
+
+def test_is_owner_scope_uses_pk_attribute():
+    permission = IsOwner()
+    view = SimpleNamespace(_resolved_owner_field="user_id")
+    request = _request(SimpleNamespace(pk=9))
+    assert permission.get_scope(request, view) == {"user_id": 9}
+
+
+def test_is_owner_scope_empty_when_user_has_no_pk():
+    permission = IsOwner()
+    view = SimpleNamespace(_resolved_owner_field="user_id")
+    request = _request(SimpleNamespace())
+    assert permission.get_scope(request, view) == {}
+
+
+def test_is_owner_requires_resolved_owner_field():
+    permission = IsOwner()
+    with pytest.raises(RuntimeError, match="owner_field"):
+        permission._owner_field(SimpleNamespace())
+
+
+def test_permission_body_model_noop_without_owner_field(test_engine, db_session_factory):
+    router = BaseViewset(
+        endpoint="/noop",
+        model=OwnedItem,
+        response_model=OwnedItemSchema,
+        db_session=db_session_factory,
+    )
+    assert router._permission_body_model(OwnedItemSchema) is OwnedItemSchema
+
+
+def test_permission_strip_owner_validator_skips_non_dict(test_engine, db_session_factory):
+    init_permissions(user_model=Account)
+
+    class ItemsViewset(BaseViewset):
+        permission_classes = [IsAuthenticated, IsOwner]
+
+    router = ItemsViewset(
+        endpoint="/items",
+        model=OwnedItem,
+        response_model=OwnedItemSchema,
+        db_session=db_session_factory,
+    )
+    patched = router._permission_body_model(OwnedItemSchema)
+    row = OwnedItem(title="from-orm", user_id=99)
+    validated = patched.model_validate(row, from_attributes=True)
+    assert validated.title == "from-orm"
