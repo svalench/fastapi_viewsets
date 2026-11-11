@@ -55,6 +55,7 @@ app.include_router(router)
 | `methods` | `Optional[List[str]]` | `None` (all) | Logical methods to register: `LIST`, `GET`, `POST`, `PUT`, `PATCH`, `DELETE` |
 | `oauth_protect` | `Optional[OAuth2PasswordBearer]` | `None` | OAuth2 dependency instance |
 | `protected_methods` | `Optional[List[str]]` | `None` | Subset of `methods` that require the bearer token. Ignored if `oauth_protect` is `None`. |
+| `auth_dependency` | `Optional[Callable]` | `None` | Runs on every registered route; use it to set `request.state.user` for [Permissions](permissions.md). |
 
 ## How protection is applied internally
 
@@ -63,7 +64,7 @@ When a method is in `protected_methods` and `oauth_protect` is provided:
 1. The handler is wrapped with `functools.partial(handler, token=Depends(oauth_protect))`.
 2. FastAPI injects the `OAuth2PasswordBearer` dependency, which requires the `Authorization: Bearer <token>` header on protected methods.
 3. If the header is missing, FastAPI returns `401 Unauthorized` automatically.
-4. Token validation and authorization logic (e.g. decoding JWT, checking scopes) is your responsibility — implement it in a dependency or inside the handler override.
+4. Token validation and authorization logic (e.g. decoding JWT, checking scopes) is your responsibility — implement it in a dependency or inside the handler override. For row-level rules, prefer optional [`permission_classes`](permissions.md) instead of overriding every CRUD method.
 
 Methods not in `protected_methods` remain publicly accessible. This lets you, for example, allow anonymous reads (`LIST`, `GET`) while requiring authentication for writes (`POST`, `PATCH`, `DELETE`).
 
@@ -125,5 +126,6 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 ## Next steps
 
+- [Permissions](permissions.md) — object-level authorization
 - [Overriding Handlers](overrides.md) — subclass for custom logic
 - [Custom Routes](custom-routes.md) — adding non-CRUD endpoints

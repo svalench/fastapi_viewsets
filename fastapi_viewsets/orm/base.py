@@ -29,6 +29,10 @@ class BaseORMAdapter(ABC):
             raise ValueError("nested foreign key must be an existing non-primary-key field")
         return field, (field,)
 
+    def discover_user_foreign_keys(self, model: Type[ModelType], user_model: Type) -> List[str]:
+        """Возвращает имена колонок с FK на ``user_model.id`` (без эвристик по int)."""
+        return []
+
     def get_nested_parent_type(self, model):
         """Infer a supported parent ID type for request validation and OpenAPI."""
         from uuid import UUID

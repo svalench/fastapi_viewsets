@@ -459,6 +459,17 @@ class TortoiseAdapter(BaseORMAdapter):
                     return canonical, aliases
         return super().get_nested_field(model, field)
 
+    def discover_user_foreign_keys(self, model, user_model):
+        from tortoise.fields.relational import ForeignKeyFieldInstance
+
+        matches: list[str] = []
+        for name, info in model._meta.fields_map.items():
+            if isinstance(info, ForeignKeyFieldInstance) and not info.pk:
+                related = info.related_model
+                if related is user_model:
+                    matches.append(f"{name}_id")
+        return matches
+
     def validate_nested_parent(self, model, field, parent_model):
         from tortoise.fields.relational import ForeignKeyFieldInstance
 

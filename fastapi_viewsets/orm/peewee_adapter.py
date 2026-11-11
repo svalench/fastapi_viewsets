@@ -434,6 +434,20 @@ class PeeweeAdapter(BaseORMAdapter):
             query = query.where(getattr(model, field) == value)
         return query
 
+    def discover_user_foreign_keys(self, model, user_model):
+        try:
+            from peewee import ForeignKeyField
+        except ImportError:  # pragma: no cover
+            return []
+
+        matches: list[str] = []
+        for name, info in model._meta.fields.items():
+            if isinstance(info, ForeignKeyField) and not info.primary_key:
+                related = getattr(info, "rel_model", None)
+                if related is user_model:
+                    matches.append(getattr(info, "object_id_name", None) or name)
+        return matches
+
     def get_nested_field(self, model, field):
         for name, info in model._meta.fields.items():
             aliases = tuple({name, info.column_name, getattr(info, "object_id_name", name)})

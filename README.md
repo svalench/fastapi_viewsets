@@ -657,6 +657,24 @@ router.register(methods=["LIST", "GET", "POST", "PATCH", "DELETE"], oauth_protec
 app.include_router(router)
 ```
 
+## Permissions (v1.8.0)
+
+Authentication (`oauth_protect` or `auth_dependency`) answers whether the caller is logged in. Optional `permission_classes` add object-level rules without overriding every CRUD handler:
+
+```python
+from fastapi_viewsets import IsAuthenticated, IsOwner, init_permissions
+
+init_permissions(user_model=User)
+
+class NotesViewset(BaseViewset):
+    permission_classes = [IsAuthenticated, IsOwner]
+    owner_field = "user_id"  # or rely on a single User FK auto-detect
+
+notes.register(methods=["LIST", "GET", "POST", "PATCH", "DELETE"], auth_dependency=current_user)
+```
+
+Another user's row id returns **404**; missing login returns **403**. Details: [docs/permissions.md](docs/permissions.md).
+
 ## Pagination, filtering, ordering
 
 **Pagination** — `BaseViewset.list` maps `limit` and `offset` to query parameters on the LIST route. Defaults are `limit=10`, `offset=0`; negative values are rejected with `422`, and `limit` is capped at `10000`.

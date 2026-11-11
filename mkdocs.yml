@@ -55,6 +55,7 @@ nav:
     - Nested Resources: nested-resources.md
     - Overriding Handlers: overrides.md
     - Authentication: authentication.md
+    - Permissions: permissions.md
     - Pagination & Filtering: pagination-filtering.md
     - Custom Routes: custom-routes.md
   - Reference:

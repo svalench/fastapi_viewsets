@@ -11,7 +11,7 @@ import functools
 import types
 from collections.abc import Iterable
 from copy import deepcopy
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Callable, Dict, List, Optional, Type
 
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
@@ -130,6 +130,7 @@ class _RegisterMixin:
         methods: Optional[List[str]] = None,
         oauth_protect: Optional[OAuth2PasswordBearer] = None,
         protected_methods: Optional[List[str]] = None,
+        auth_dependency: Optional[Callable[..., Any]] = None,
     ) -> None:
         """Register CRUD endpoints on this router.
 
@@ -144,6 +145,9 @@ class _RegisterMixin:
             protected_methods: Subset of ``methods`` that should require
                 the bearer token. RESTORE inherits DELETE protection.
                 Ignored if ``oauth_protect`` is None.
+            auth_dependency: Optional FastAPI dependency that should run
+                on every registered route and populate ``request.state.user``
+                for authorization checks.
         """
         protected_methods = list(protected_methods or [])
 
@@ -195,6 +199,8 @@ class _RegisterMixin:
                     body_model = _build_partial_model(self.response_model)
                 if getattr(self, "nested", None) is not None:
                     body_model = self._nested_body_model(body_model)
+                if getattr(self, "_resolved_owner_field", None):
+                    body_model = self._permission_body_model(body_model)
                 handler = _clone_bound_method(handler, {"item": body_model})
 
             original_doc = handler.__doc__
@@ -222,6 +228,8 @@ class _RegisterMixin:
             route_name = self._build_route_name(method)
             openapi_extra = self._build_openapi_extra(spec)
             dependencies = []
+            if auth_dependency is not None:
+                dependencies.append(Depends(auth_dependency))
             if getattr(self, "nested", None) is not None:
                 # Authenticate before revealing whether a parent exists. The
                 # handler's token dependency reuses FastAPI's dependency cache.
