@@ -670,24 +670,24 @@ def test_peewee_discover_user_foreign_keys():
     peewee = pytest.importorskip("peewee")
     from fastapi_viewsets.orm.peewee_adapter import PeeweeAdapter
 
-    database = peewee.SqliteDatabase(":memory:")
+    pw_db = peewee.SqliteDatabase(":memory:")
 
     class User(peewee.Model):
         id = peewee.AutoField()
         username = peewee.TextField()
 
         class Meta:
-            database = database
+            database = pw_db
 
     class Note(peewee.Model):
         id = peewee.AutoField()
         owner = peewee.ForeignKeyField(User, backref="notes")
 
         class Meta:
-            database = database
+            database = pw_db
 
-    database.create_tables([User, Note])
-    adapter = PeeweeAdapter(database_url="sqlite:///:memory:", database=database)
+    pw_db.create_tables([User, Note])
+    adapter = PeeweeAdapter(database_url="sqlite:///:memory:", database=pw_db)
     keys = adapter.discover_user_foreign_keys(Note, User)
     assert "owner" in keys or "owner_id" in keys
 
