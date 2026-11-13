@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.8.0 (unreleased)
+## v1.8.0
 
 - Optional DRF-style `permission_classes` (`IsAuthenticated`, `IsOwner`, `IsAdminUser`) with SQL `scope` merging for all ORM adapters.
 - `auth_dependency` on `register()` to populate `request.state.user`; foreign ids return `404`, explicit denials `403`.

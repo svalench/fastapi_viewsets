@@ -1,4 +1,4 @@
-# Release 1.8.0 (planned)
+# Release 1.8.0
 
 ## Permissions
 
@@ -12,4 +12,3 @@
 ## Compatibility
 
 - Viewsets without `permission_classes` are unchanged.
-- PyPI version remains **1.7.0** until this release is published.
