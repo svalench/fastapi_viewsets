@@ -45,6 +45,22 @@ Nested viewsets expose `get_parent()` inside generated handlers and
 access permissions. `parent_context(request)` is a dependency for custom routes.
 See [Nested Resources](nested-resources.md) for signatures and configuration.
 
+### Permissions (v1.8.0)
+
+Class attributes on a subclass:
+
+| Attribute | Type | Description |
+| --- | --- | --- |
+| `permission_classes` | `Sequence[Type[BasePermission]]` | Optional hooks; default empty (no-op) |
+| `owner_field` | `Optional[str]` | Explicit owner column for `IsOwner` |
+
+```python
+from fastapi_viewsets import init_permissions, IsAuthenticated, IsOwner
+init_permissions(user_model=User)
+```
+
+See [Permissions](permissions.md).
+
 #### `list()`
 
 ```python
@@ -162,6 +178,7 @@ def register(
     methods: Optional[List[str]] = None,
     oauth_protect: Optional[OAuth2PasswordBearer] = None,
     protected_methods: Optional[List[str]] = None,
+    auth_dependency: Optional[Callable[..., Any]] = None,
 ) -> None
 ```
 
@@ -172,6 +189,7 @@ Register CRUD endpoints on the router.
 | `methods` | `Optional[List[str]]` | `None` (all) | Logical methods to register |
 | `oauth_protect` | `Optional[OAuth2PasswordBearer]` | `None` | OAuth2 dependency for protected operations |
 | `protected_methods` | `Optional[List[str]]` | `None` | Subset of `methods` requiring the bearer token |
+| `auth_dependency` | `Optional[Callable]` | `None` | Dependency run on each route; should set `request.state.user` |
 
 ### Allowed methods
 

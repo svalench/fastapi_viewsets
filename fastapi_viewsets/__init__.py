@@ -15,6 +15,16 @@ from pydantic import BaseModel
 from fastapi_viewsets._compat import model_to_dict
 from fastapi_viewsets._register import _RegisterMixin
 from fastapi_viewsets.nested import NestedConfig, _NestedMixin
+from fastapi_viewsets.permissions import (
+    BasePermission,
+    IsAdmin,
+    IsAdminUser,
+    IsAuthenticated,
+    IsOwner,
+    _PermissionsMixin,
+    get_user,
+    init_permissions,
+)
 from fastapi_viewsets.soft_delete import SoftDeleteConfig
 from fastapi_viewsets.constants import ALLOWED_METHODS
 from fastapi_viewsets.db_conf import get_orm_adapter
@@ -45,7 +55,7 @@ def _noop_dependency() -> None:
 butle = _noop_dependency
 
 
-class BaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
+class BaseViewset(_PermissionsMixin, _NestedMixin, _RegisterMixin, APIRouter):
     """Synchronous CRUD viewset.
 
     Provides ``LIST``, ``GET``, ``POST``, ``PUT``, ``PATCH`` and
@@ -97,6 +107,7 @@ class BaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
                 raise ValueError("soft deletion requires a model")
             self.orm_adapter.validate_soft_delete(model, soft_delete)
         self._configure_nested(nested)
+        self._configure_permissions()
 
     # ------------------------------------------------------------------
     # CRUD handlers
@@ -137,6 +148,8 @@ class BaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
         if not isinstance(offset, int):
             offset = 0
 
+        self._check_permissions(request, "LIST")
+
         config = get_list_config(self.response_model)
         return get_list_queryset(
             self.model,
@@ -144,7 +157,7 @@ class BaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
             limit=limit,
             offset=offset,
             orm_adapter=self.orm_adapter,
-            **self._orm_options(),
+            **self._orm_options(request),
             response_model=self.response_model,
             search=search,
             ordering=parse_ordering_param(
@@ -158,6 +171,7 @@ class BaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
     def get_element(
         self,
         id: Union[int, str],
+        request: Request = None,
         token: str = Depends(_noop_dependency),
     ) -> ResponseModelType:
         """Retrieve a single item by ID."""
@@ -169,33 +183,39 @@ class BaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Element id cannot be empty",
             )
-        return get_element_by_id(
+        self._check_permissions(request, "GET")
+        element = get_element_by_id(
             self.model,
             db_session=self.db_session,
             id=id,
             orm_adapter=self.orm_adapter,
-            **self._orm_options(),
+            **self._orm_options(request),
             response_model=self.response_model,
         )
+        self._check_object_permissions(request, "GET", element)
+        return element
 
     def create_element(
         self,
         item: ResponseModelType = Body(...),
+        request: Request = None,
         token: str = Depends(_noop_dependency),
     ) -> ResponseModelType:
         """Create a new item."""
+        self._check_permissions(request, "POST")
         return create_element(
             self.model,
             db_session=self.db_session,
             data=model_to_dict(item),
             orm_adapter=self.orm_adapter,
-            **self._orm_options(),
+            **self._create_options(request),
         )
 
     def update_element(
         self,
         id: Union[int, str],
         item: ResponseModelType = Body(...),
+        request: Request = None,
         token: str = Depends(_noop_dependency),
         partial: bool = False,
     ) -> ResponseModelType:
@@ -205,6 +225,17 @@ class BaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
         client explicitly set, preserving correct PATCH semantics under
         Pydantic v2.
         """
+        action = self._action_from_partial(partial)
+        self._check_permissions(request, action)
+        existing = get_element_by_id(
+            self.model,
+            db_session=self.db_session,
+            id=id,
+            orm_adapter=self.orm_adapter,
+            **self._orm_options(request),
+            response_model=self.response_model,
+        )
+        self._check_object_permissions(request, action, existing)
         return update_element(
             self.model,
             self.db_session,
@@ -212,18 +243,29 @@ class BaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
             model_to_dict(item, exclude_unset=partial),
             partial=partial,
             orm_adapter=self.orm_adapter,
-            **self._orm_options(),
+            **self._orm_options(request),
         )
 
     def delete_element(
         self,
         id: Union[int, str],
+        request: Request = None,
         token: str = Depends(_noop_dependency),
     ) -> Dict[str, Union[bool, str]]:
         """Delete an item by ID."""
+        self._check_permissions(request, "DELETE")
+        existing = get_element_by_id(
+            self.model,
+            db_session=self.db_session,
+            id=id,
+            orm_adapter=self.orm_adapter,
+            **self._orm_options(request),
+            response_model=self.response_model,
+        )
+        self._check_object_permissions(request, "DELETE", existing)
         result = delete_element(
             self.model, self.db_session, id, orm_adapter=self.orm_adapter,
-            **self._orm_options(),
+            **self._orm_options(request),
         )
         if result is True:
             return {"status": True, "text": "successfully deleted"}
@@ -232,6 +274,7 @@ class BaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
     def restore_element(
         self,
         id: Union[int, str],
+        request: Request = None,
         token: str = Depends(_noop_dependency),
     ) -> Dict[str, Union[bool, str]]:
         """Restore a soft-deleted item; active or missing IDs return 404."""
@@ -239,8 +282,9 @@ class BaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
             from fastapi import HTTPException
 
             raise HTTPException(status_code=404, detail="Soft deletion is not enabled")
+        self._check_permissions(request, "RESTORE")
         result = self.orm_adapter.restore_element(
-            self.model, self.db_session, id, **self._orm_options()
+            self.model, self.db_session, id, **self._orm_options(request)
         )
         return {
             "status": result,
@@ -251,4 +295,16 @@ class BaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
 # Re-export async viewset for convenience.
 from fastapi_viewsets.async_base import AsyncBaseViewset  # noqa: E402
 
-__all__ = ["BaseViewset", "AsyncBaseViewset", "SoftDeleteConfig", "NestedConfig"]
+__all__ = [
+    "BaseViewset",
+    "AsyncBaseViewset",
+    "SoftDeleteConfig",
+    "NestedConfig",
+    "BasePermission",
+    "IsAuthenticated",
+    "IsOwner",
+    "IsAdmin",
+    "IsAdminUser",
+    "init_permissions",
+    "get_user",
+]

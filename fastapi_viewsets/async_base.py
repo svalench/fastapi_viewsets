@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from fastapi_viewsets._compat import model_to_dict
 from fastapi_viewsets._register import _RegisterMixin
 from fastapi_viewsets.nested import NestedConfig, _NestedMixin
+from fastapi_viewsets.permissions import _PermissionsMixin
 from fastapi_viewsets.soft_delete import SoftDeleteConfig
 from fastapi_viewsets.async_utils import (
     create_element,
@@ -36,7 +37,7 @@ def _noop_dependency() -> None:
 butle = _noop_dependency
 
 
-class AsyncBaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
+class AsyncBaseViewset(_PermissionsMixin, _NestedMixin, _RegisterMixin, APIRouter):
     """Asynchronous CRUD viewset.
 
     Mirrors :class:`fastapi_viewsets.BaseViewset` but exposes ``async``
@@ -88,6 +89,7 @@ class AsyncBaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
                 raise ValueError("soft deletion requires a model")
             self.orm_adapter.validate_soft_delete(model, soft_delete)
         self._configure_nested(nested)
+        self._configure_permissions()
 
     # ------------------------------------------------------------------
     # CRUD handlers
@@ -128,6 +130,8 @@ class AsyncBaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
         if not isinstance(offset, int):
             offset = 0
 
+        self._check_permissions(request, "LIST")
+
         config = get_list_config(self.response_model)
         return await get_list_queryset(
             self.model,
@@ -135,7 +139,7 @@ class AsyncBaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
             limit=limit,
             offset=offset,
             orm_adapter=self.orm_adapter,
-            **self._orm_options(),
+            **self._orm_options(request),
             response_model=self.response_model,
             search=search,
             ordering=parse_ordering_param(
@@ -149,6 +153,7 @@ class AsyncBaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
     async def get_element(
         self,
         id: Union[int, str],
+        request: Request = None,
         token: str = Depends(_noop_dependency),
     ) -> ResponseModelType:
         """Retrieve a single item by ID (async)."""
@@ -160,33 +165,39 @@ class AsyncBaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Element id cannot be empty",
             )
-        return await get_element_by_id(
+        self._check_permissions(request, "GET")
+        element = await get_element_by_id(
             self.model,
             db_session=self.db_session,
             id=id,
             orm_adapter=self.orm_adapter,
-            **self._orm_options(),
+            **self._orm_options(request),
             response_model=self.response_model,
         )
+        self._check_object_permissions(request, "GET", element)
+        return element
 
     async def create_element(
         self,
         item: ResponseModelType = Body(...),
+        request: Request = None,
         token: str = Depends(_noop_dependency),
     ) -> ResponseModelType:
         """Create a new item (async)."""
+        self._check_permissions(request, "POST")
         return await create_element(
             self.model,
             db_session=self.db_session,
             data=model_to_dict(item),
             orm_adapter=self.orm_adapter,
-            **self._orm_options(),
+            **self._create_options(request),
         )
 
     async def update_element(
         self,
         id: Union[int, str],
         item: ResponseModelType = Body(...),
+        request: Request = None,
         token: str = Depends(_noop_dependency),
         partial: bool = False,
     ) -> ResponseModelType:
@@ -195,6 +206,17 @@ class AsyncBaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
         ``partial=True`` (used by ``PATCH``) only writes fields the
         client explicitly set.
         """
+        action = self._action_from_partial(partial)
+        self._check_permissions(request, action)
+        existing = await get_element_by_id(
+            self.model,
+            db_session=self.db_session,
+            id=id,
+            orm_adapter=self.orm_adapter,
+            **self._orm_options(request),
+            response_model=self.response_model,
+        )
+        self._check_object_permissions(request, action, existing)
         return await update_element(
             self.model,
             self.db_session,
@@ -202,18 +224,29 @@ class AsyncBaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
             model_to_dict(item, exclude_unset=partial),
             partial=partial,
             orm_adapter=self.orm_adapter,
-            **self._orm_options(),
+            **self._orm_options(request),
         )
 
     async def delete_element(
         self,
         id: Union[int, str],
+        request: Request = None,
         token: str = Depends(_noop_dependency),
     ) -> Dict[str, Union[bool, str]]:
         """Delete an item by ID (async)."""
+        self._check_permissions(request, "DELETE")
+        existing = await get_element_by_id(
+            self.model,
+            db_session=self.db_session,
+            id=id,
+            orm_adapter=self.orm_adapter,
+            **self._orm_options(request),
+            response_model=self.response_model,
+        )
+        self._check_object_permissions(request, "DELETE", existing)
         result = await delete_element(
             self.model, self.db_session, id, orm_adapter=self.orm_adapter,
-            **self._orm_options(),
+            **self._orm_options(request),
         )
         if result is True:
             return {"status": True, "text": "successfully deleted"}
@@ -222,6 +255,7 @@ class AsyncBaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
     async def restore_element(
         self,
         id: Union[int, str],
+        request: Request = None,
         token: str = Depends(_noop_dependency),
     ) -> Dict[str, Union[bool, str]]:
         """Restore a soft-deleted item; active or missing IDs return 404."""
@@ -229,8 +263,9 @@ class AsyncBaseViewset(_NestedMixin, _RegisterMixin, APIRouter):
             from fastapi import HTTPException
 
             raise HTTPException(status_code=404, detail="Soft deletion is not enabled")
+        self._check_permissions(request, "RESTORE")
         result = await self.orm_adapter.restore_element_async(
-            self.model, self.db_session, id, **self._orm_options()
+            self.model, self.db_session, id, **self._orm_options(request)
         )
         return {
             "status": result,

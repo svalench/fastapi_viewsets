@@ -707,6 +707,27 @@ class SQLAlchemyAdapter(BaseORMAdapter):
         finally:
             await db.close()
     
+    def discover_user_foreign_keys(self, model, user_model):
+        from sqlalchemy import inspect
+
+        user_table = getattr(user_model, "__tablename__", user_model.__table__.name)
+        matches: list[str] = []
+        mapper = inspect(model)
+        for attribute in mapper.column_attrs:
+            column = attribute.columns[0]
+            if column.primary_key:
+                continue
+            for reference in column.foreign_keys:
+                if reference.column.table.name == user_table and reference.column.name == "id":
+                    matches.append(attribute.key)
+        for relationship in mapper.relationships:
+            if relationship.mapper.class_ is user_model:
+                for column in relationship.local_columns:
+                    name = column.key
+                    if name not in matches:
+                        matches.append(name)
+        return matches
+
     def get_model_columns(self, model: Type[ModelType]) -> Dict[str, Any]:
         """Get model column information."""
         columns = {}

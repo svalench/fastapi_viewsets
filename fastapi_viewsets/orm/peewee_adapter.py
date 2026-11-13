@@ -428,11 +428,46 @@ class PeeweeAdapter(BaseORMAdapter):
     def restore_element(self, model, db_session, id, *, soft_delete: SoftDeleteConfig, scope=None) -> bool:
         return self._change_deleted_state(model, id, soft_delete, restore=True, scope=scope)
 
+    def _scoped_data(self, model, data, scope, *, create=False):
+        """Peewee create ожидает имя FK-поля (owner), а не object_id_name (owner_id)."""
+        from peewee import ForeignKeyField
+
+        result = dict(data)
+        for field, value in (scope or {}).items():
+            canonical, aliases = self.get_nested_field(model, field)
+            result = {key: item for key, item in result.items() if key not in aliases}
+            if not create:
+                continue
+            target = canonical
+            for name, info in model._meta.fields.items():
+                oid = getattr(info, "object_id_name", None)
+                if not (name in aliases or name == canonical or (oid and oid == canonical)):
+                    continue
+                if isinstance(info, ForeignKeyField):
+                    target = name
+                break
+            result[target] = value
+        return result
+
     @staticmethod
     def _scope_query(model, query, scope):
         for field, value in (scope or {}).items():
             query = query.where(getattr(model, field) == value)
         return query
+
+    def discover_user_foreign_keys(self, model, user_model):
+        try:
+            from peewee import ForeignKeyField
+        except ImportError:  # pragma: no cover
+            return []
+
+        matches: list[str] = []
+        for name, info in model._meta.fields.items():
+            if isinstance(info, ForeignKeyField) and not info.primary_key:
+                related = getattr(info, "rel_model", None)
+                if related is user_model:
+                    matches.append(getattr(info, "object_id_name", None) or name)
+        return matches
 
     def get_nested_field(self, model, field):
         for name, info in model._meta.fields.items():
@@ -440,11 +475,25 @@ class PeeweeAdapter(BaseORMAdapter):
             if field in aliases:
                 if info.primary_key:
                     break
-                return name, aliases
+                canonical = getattr(info, "object_id_name", None) or name
+                return canonical, aliases
         raise ValueError("nested foreign key must be an existing non-primary-key field")
 
     def validate_nested_parent(self, model, field, parent_model):
-        info = model._meta.fields[field]
+        _, aliases = self.get_nested_field(model, field)
+        info = None
+        rel_name = field
+        if field in model._meta.fields:
+            info = model._meta.fields[field]
+            rel_name = field
+        else:
+            for name, candidate in model._meta.fields.items():
+                if name in aliases or getattr(candidate, "object_id_name", None) in aliases:
+                    info = candidate
+                    rel_name = name
+                    break
+        if info is None:
+            raise ValueError("nested foreign key must be an existing non-primary-key field")
         related = getattr(info, "rel_model", None)
         if related is not None and related is not parent_model:
             raise ValueError("nested foreign key references a different parent model")

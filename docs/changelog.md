@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.8.0 (unreleased)
+
+- Optional DRF-style `permission_classes` (`IsAuthenticated`, `IsOwner`, `IsAdminUser`) with SQL `scope` merging for all ORM adapters.
+- `auth_dependency` on `register()` to populate `request.state.user`; foreign ids return `404`, explicit denials `403`.
+- `init_permissions(user_model=...)` and owner-field auto-detect when exactly one User FK exists.
+
+See [Permissions](permissions.md).
+
 ## v1.7.0
 
 - Optional nested resources with automatic parent lookup, URL-managed foreign
